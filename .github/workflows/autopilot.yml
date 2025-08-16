@@ -1,0 +1,27 @@
+name: Daily Video Autopilot
+
+on:
+  schedule:
+    - cron: "30 9 * * *"   # Runs daily at 3 PM IST
+  workflow_dispatch:       # Allow manual trigger too
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install requests gTTS moviepy
+
+      - name: Run generator
+        run: |
+          python autopilot.py
