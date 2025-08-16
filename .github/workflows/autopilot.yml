@@ -1,14 +1,13 @@
-name: Autopilot Video Generator
+name: Autopilot Video Bot
 
 on:
   schedule:
-    - cron: "30 9 * * *"   # runs at 3:00 PM IST (9:30 AM UTC)
-  workflow_dispatch:       # allow manual run button
+    - cron: "30 9 * * *"   # 3PM IST every day (9:30 AM UTC)
+  workflow_dispatch:
 
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -16,18 +15,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
-          pip install gTTS moviepy
+          pip install openai moviepy gTTS requests
 
       - name: Run autopilot
-        run: |
-          python autopilot.py
-
-      - name: Upload video artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: legal-video
-          path: final.mp4
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python autopilot.py
