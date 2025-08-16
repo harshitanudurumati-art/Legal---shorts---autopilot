@@ -1,9 +1,9 @@
-name: Daily Video Autopilot
+name: Autopilot Video Generator
 
 on:
   schedule:
-    - cron: "30 9 * * *"   # Runs daily at 3 PM IST
-  workflow_dispatch:       # Allow manual trigger too
+    - cron: "30 9 * * *"   # runs at 3:00 PM IST (9:30 AM UTC)
+  workflow_dispatch:       # allow manual run button
 
 jobs:
   build:
@@ -13,15 +13,21 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
-          pip install requests gTTS moviepy
+          pip install gTTS moviepy
 
-      - name: Run generator
+      - name: Run autopilot
         run: |
           python autopilot.py
+
+      - name: Upload video artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: legal-video
+          path: final.mp4
