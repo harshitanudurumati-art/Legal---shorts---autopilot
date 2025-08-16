@@ -1,46 +1,51 @@
-import json
-import datetime
-import os
-import requests
-from gtts import gTTS
-from moviepy.editor import *
+import os, json, random, datetime, requests, openai, moviepy.editor as mp, gtts
 
-# Step 1: Pick today's topic from topics.json
-with open("topics.json", "r") as f:
-    topics = json.load(f)
+# Load API Keys
+openai.api_key = os.getenv("OPENAI_API_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-today = datetime.date.today()
-topic_index = today.toordinal() % len(topics)
-topic = topics[topic_index]
+# Pick today’s topic
+with open("topics.json") as f:
+    topics = json.load(f)["topics"]
+topic = topics[datetime.datetime.now().day % len(topics)]
 
-# Step 2: Fetch updates (placeholder - can connect to legal API later)
-updates = f"Latest case law and news about {topic} (auto-updated placeholder)."
+# Ask ChatGPT for script
+prompt = f"Write a 2-minute YouTube video script on: {topic}. Use facts, references, and clear explanation. Avoid predictions."
+response = openai.ChatCompletion.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}]
+)
+script = response["choices"][0]["message"]["content"]
 
-# Step 3: Write script
-script = f"""
-Today's Legal Insight:
-Topic: {topic}
+# Save script
+with open("script.txt", "w") as f:
+    f.write(script)
 
-Recent Update:
-{updates}
+# Convert script to audio
+tts = gtts.gTTS(script, lang="en")
+tts.save("voice.mp3")
 
-Stay tuned for more legal shorts daily!
-"""
+# Background music (royalty free)
+bg_music = mp.AudioFileClip("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3").subclip(0,60)
 
-# Step 4: Generate audio
-tts = gTTS(script)
-os.makedirs("output", exist_ok=True)
-audio_path = f"output/{topic}_audio.mp3"
-tts.save(audio_path)
+# Merge voice + bg music
+voice = mp.AudioFileClip("voice.mp3")
+final_audio = mp.CompositeAudioClip([voice.volumex(1.0), bg_music.volumex(0.2)])
+final_audio.write_audiofile("final_audio.mp3")
 
-# Step 5: Generate video
-txt_clip = TextClip(script, fontsize=40, color="white", size=(720,1280), method='caption')
-txt_clip = txt_clip.set_duration(30)
+# Create video with text
+clips = []
+for line in script.split("."):
+    txt_clip = mp.TextClip(line.strip(), fontsize=40, color="white", bg_color="black", size=(1280,720))
+    txt_clip = txt_clip.set_duration(3)
+    clips.append(txt_clip)
 
-audio = AudioFileClip(audio_path)
-final = txt_clip.set_audio(audio)
+video = mp.concatenate_videoclips(clips)
+video = video.set_audio(mp.AudioFileClip("final_audio.mp3"))
+video.write_videofile("final_video.mp4", fps=24)
 
-video_path = f"output/{topic}_video.mp4"
-final.write_videofile(video_path, fps=24)
-
-print("✅ Video generated:", video_path)
+# Send to Telegram
+url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+with open("final_video.mp4", "rb") as vid:
+    requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID}, files={"video": vid})
