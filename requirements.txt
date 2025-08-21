@@ -1,5 +1,5 @@
 openai
 python-telegram-bot
 moviepy
-gtts
+gTTS
 requests
