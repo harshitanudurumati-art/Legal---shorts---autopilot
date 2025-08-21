@@ -1,14 +1,12 @@
 import os
 import json
-import random
 import datetime
 import requests
 import moviepy.editor as mp
 import gtts
-from openai import OpenAI
 
-# Load API Keys
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Load secrets
+DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -17,14 +15,28 @@ with open("topics.json") as f:
     topics = json.load(f)["topics"]
 topic = topics[datetime.datetime.now().day % len(topics)]
 
-# Ask ChatGPT for script
+# Ask DeepInfra for script
+def get_script_from_deepinfra(prompt: str) -> str:
+    url = "https://api.deepinfra.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {DEEPINFRA_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "meta-llama/Llama-3-8b-chat",  # free DeepInfra model
+        "messages": [
+            {"role": "system", "content": "You are a clear, factual legal explainer bot."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.4
+    }
+    resp = requests.post(url, json=payload, headers=headers, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
 prompt = f"Write a 2-minute YouTube video script on: {topic}. Use facts, references, and clear explanation. Avoid predictions."
-resp = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.4,
-)
-script = resp.choices[0].message.content.strip()
+script = get_script_from_deepinfra(prompt)
 
 # Save script
 with open("script.txt", "w") as f:
@@ -34,7 +46,7 @@ with open("script.txt", "w") as f:
 tts = gtts.gTTS(script, lang="en")
 tts.save("voice.mp3")
 
-# Download background music (local file needed)
+# Download background music (only once, reuse file)
 bg_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
 bg_file = "bg_music.mp3"
 if not os.path.exists(bg_file):
