@@ -1,5 +1,7 @@
-openai
-python-telegram-bot
-moviepy
-gTTS
-requests
+openai>=1.30.0
+moviepy==1.0.3
+imageio==2.34.0
+imageio-ffmpeg==0.4.9
+gTTS==2.5.1
+pydub==0.25.1
+requests>=2.31.0
