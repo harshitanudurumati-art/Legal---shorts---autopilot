@@ -1,9 +1,9 @@
 name: Autopilot Video Bot
 
 on:
-  workflow_dispatch:            # Adds the Run workflow button
+  workflow_dispatch:            # Manual run button
   schedule:
-    - cron: "30 9 * * *"        # Runs every day 3:00 PM IST (09:30 UTC)
+    - cron: "30 9 * * *"        # 3:00 PM IST daily
 
 jobs:
   run-bot:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system packages (for MoviePy text/video)
+      - name: Install system packages (ffmpeg, fonts)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick fonts-dejavu-core
@@ -23,21 +23,46 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Show working dir & files
+        run: |
+          pwd
+          ls -lah
+
       - name: Verify requirements.txt exists
         run: |
-          echo "Listing repo files..."
-          ls -lah
-          echo "Contents of requirements.txt:"
-          cat requirements.txt
+          echo "----- requirements.txt -----"
+          cat requirements.txt || (echo "requirements.txt MISSING" && exit 1)
 
-      - name: Install dependencies
+      - name: Install dependencies (with fallback + checks)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          echo "---- Installed packages ----"
-          pip list
-          echo "---- MoviePy details ----"
-          pip show moviepy || echo "MoviePy NOT installed!"
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+          # extra safety installs
+          pip install --no-cache-dir moviepy imageio-ffmpeg gTTS || true
+          echo "----- pip show moviepy -----"
+          pip show moviepy || (echo "MoviePy NOT installed!" && exit 1)
+          python - << 'PY'
+import importlib
+mods = ["moviepy.editor","gtts","imageio_ffmpeg"]
+for m in mods:
+    try:
+        importlib.import_module(m)
+        print("OK:", m)
+    except Exception as e:
+        print("FAIL:", m, "->", e)
+        raise SystemExit(1)
+PY
+
+      - name: Debug secrets (mask sensitive values)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          [ -n "$OPENAI_API_KEY" ] && echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}" || (echo "OPENAI_API_KEY is EMPTY" && exit 1)
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}" || (echo "TELEGRAM_BOT_TOKEN is EMPTY" && exit 1)
+          [ -n "$TELEGRAM_CHAT_ID" ] && echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID" || (echo "TELEGRAM_CHAT_ID is EMPTY" && exit 1)
+          echo "Secrets look good."
 
       - name: Run autopilot
         env:
