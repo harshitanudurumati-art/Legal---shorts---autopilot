@@ -1,7 +1,7 @@
 name: Autopilot Video Bot
 
 on:
-  workflow_dispatch:            # Adds the Run workflow button
+  workflow_dispatch:            # Manual trigger
   schedule:
     - cron: "30 9 * * *"        # Runs every day 3:00 PM IST (09:30 UTC)
 
@@ -39,9 +39,14 @@ jobs:
           echo "---- MoviePy details ----"
           pip show moviepy || echo "MoviePy NOT installed!"
 
+      - name: Debug DeepInfra secret
+        run: echo "DeepInfra key length = ${#DEEPINFRA_API_KEY}"
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+
       - name: Run autopilot
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python autopilot.py
