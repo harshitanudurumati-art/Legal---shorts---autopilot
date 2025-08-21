@@ -1,9 +1,9 @@
 name: Autopilot Video Bot
 
 on:
-  workflow_dispatch:            # Manual run
+  workflow_dispatch:            # Adds the Run workflow button
   schedule:
-    - cron: "30 9 * * *"        # 3:00 PM IST daily
+    - cron: "30 9 * * *"        # Runs every day 3:00 PM IST (09:30 UTC)
 
 jobs:
   run-bot:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system packages (ffmpeg, fonts)
+      - name: Install system packages (for MoviePy text/video)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick fonts-dejavu-core
@@ -23,49 +23,21 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Show Python & working dir
-        run: |
-          which python
-          python -V
-          pwd
-          ls -lah
-
       - name: Verify requirements.txt exists
         run: |
-          echo "----- requirements.txt -----"
-          cat requirements.txt || (echo "requirements.txt MISSING" && exit 1)
+          echo "Listing repo files..."
+          ls -lah
+          echo "Contents of requirements.txt:"
+          cat requirements.txt
 
-      - name: Install dependencies (with fallback)
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install --no-cache-dir -r requirements.txt
-          # Fallback hard install in case the file was ignored
-          pip install --no-cache-dir moviepy imageio-ffmpeg gTTS || true
-          echo "----- pip list (tail) -----"
-          pip list | tail -n 50
-          echo "----- pip show moviepy -----"
-          pip show moviepy || (echo "MoviePy NOT installed!" && exit 1)
-          python - << 'PY'
-import importlib
-for m in ["moviepy.editor","gtts","imageio_ffmpeg"]:
-    try:
-        importlib.import_module(m)
-        print("OK:", m)
-    except Exception as e:
-        print("FAIL:", m, e)
-        raise SystemExit(1)
-PY
-
-      - name: Fail early if secrets are missing
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          [ -n "$OPENAI_API_KEY" ] || (echo "OPENAI_API_KEY is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
-          [ -n "$TELEGRAM_BOT_TOKEN" ] || (echo "TELEGRAM_BOT_TOKEN is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
-          [ -n "$TELEGRAM_CHAT_ID" ] || (echo "TELEGRAM_CHAT_ID is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
-          echo "All required secrets present."
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "---- Installed packages ----"
+          pip list
+          echo "---- MoviePy details ----"
+          pip show moviepy || echo "MoviePy NOT installed!"
 
       - name: Run autopilot
         env:
