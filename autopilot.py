@@ -4,6 +4,7 @@ import datetime
 import requests
 import moviepy.editor as mp
 import gtts
+from textwrap import wrap
 
 # Load secrets
 DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
@@ -17,13 +18,13 @@ topic = topics[datetime.datetime.now().day % len(topics)]
 
 # Ask DeepInfra for script
 def get_script_from_deepinfra(prompt: str) -> str:
-    url = "https://api.deepinfra.com/v1/chat/completions"
+    url = "https://api.deepinfra.com/v1/openai/chat/completions"  # fixed endpoint
     headers = {
         "Authorization": f"Bearer {DEEPINFRA_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "meta-llama/Llama-3-8b-chat",  # free DeepInfra model
+        "model": "meta-llama/Meta-Llama-3-8B-Instruct",  # valid DeepInfra model
         "messages": [
             {"role": "system", "content": "You are a clear, factual legal explainer bot."},
             {"role": "user", "content": prompt}
@@ -66,12 +67,15 @@ for line in script.split("."):
     line = line.strip()
     if not line:
         continue
+    # Wrap long lines so they fit on screen
+    wrapped = "\n".join(wrap(line, width=40))
     txt_clip = mp.TextClip(
-        line,
+        wrapped,
         fontsize=40,
         color="white",
         bg_color="black",
         size=(1280, 720),
+        method="caption"
     ).set_duration(3)
     clips.append(txt_clip)
 
