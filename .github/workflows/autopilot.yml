@@ -1,7 +1,7 @@
 name: Autopilot Video Bot
 
 on:
-  workflow_dispatch:            # Manual run button
+  workflow_dispatch:            # Manual run
   schedule:
     - cron: "30 9 * * *"        # 3:00 PM IST daily
 
@@ -23,8 +23,10 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Show working dir & files
+      - name: Show Python & working dir
         run: |
+          which python
+          python -V
           pwd
           ls -lah
 
@@ -33,36 +35,37 @@ jobs:
           echo "----- requirements.txt -----"
           cat requirements.txt || (echo "requirements.txt MISSING" && exit 1)
 
-      - name: Install dependencies (with fallback + checks)
+      - name: Install dependencies (with fallback)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install --no-cache-dir -r requirements.txt
-          # extra safety installs
+          # Fallback hard install in case the file was ignored
           pip install --no-cache-dir moviepy imageio-ffmpeg gTTS || true
+          echo "----- pip list (tail) -----"
+          pip list | tail -n 50
           echo "----- pip show moviepy -----"
           pip show moviepy || (echo "MoviePy NOT installed!" && exit 1)
           python - << 'PY'
 import importlib
-mods = ["moviepy.editor","gtts","imageio_ffmpeg"]
-for m in mods:
+for m in ["moviepy.editor","gtts","imageio_ffmpeg"]:
     try:
         importlib.import_module(m)
         print("OK:", m)
     except Exception as e:
-        print("FAIL:", m, "->", e)
+        print("FAIL:", m, e)
         raise SystemExit(1)
 PY
 
-      - name: Debug secrets (mask sensitive values)
+      - name: Fail early if secrets are missing
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          [ -n "$OPENAI_API_KEY" ] && echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}" || (echo "OPENAI_API_KEY is EMPTY" && exit 1)
-          [ -n "$TELEGRAM_BOT_TOKEN" ] && echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}" || (echo "TELEGRAM_BOT_TOKEN is EMPTY" && exit 1)
-          [ -n "$TELEGRAM_CHAT_ID" ] && echo "TELEGRAM_CHAT_ID: $TELEGRAM_CHAT_ID" || (echo "TELEGRAM_CHAT_ID is EMPTY" && exit 1)
-          echo "Secrets look good."
+          [ -n "$OPENAI_API_KEY" ] || (echo "OPENAI_API_KEY is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
+          [ -n "$TELEGRAM_BOT_TOKEN" ] || (echo "TELEGRAM_BOT_TOKEN is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
+          [ -n "$TELEGRAM_CHAT_ID" ] || (echo "TELEGRAM_CHAT_ID is EMPTY → add it in Settings > Secrets > Actions" && exit 1)
+          echo "All required secrets present."
 
       - name: Run autopilot
         env:
