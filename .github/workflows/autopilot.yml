@@ -36,15 +36,13 @@ jobs:
       - name: Debug Hugging Face secret
         run: |
           echo "HF key length = ${#HF_API_KEY}"
-          echo "HF model     = ${HF_MODEL}"
+          echo "HF models = EleutherAI/gpt-neo-125M, gpt2, facebook/bart-large-cnn"
         env:
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
-          HF_MODEL: "EleutherAI/gpt-neo-125M"
 
       - name: Run autopilot
         env:
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
-          HF_MODEL: "EleutherAI/gpt-neo-125M"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python autopilot.py
