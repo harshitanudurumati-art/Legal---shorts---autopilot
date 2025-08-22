@@ -2,51 +2,40 @@
 import os, sys, datetime, requests, moviepy.editor as mp, gtts
 from textwrap import wrap
 
-# ---------------------------
-# Config
-# ---------------------------
 HF_API_KEY = os.getenv("HF_API_KEY")
-HF_MODELS = ["google/flan-t5-small"]  # Free, stable model
+HF_MODELS = ["google/flan-t5-small"]
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 if not HF_API_KEY:
-    print("WARNING: HF_API_KEY not set. Will use fallback script.")
+    print("WARNING: HF_API_KEY not set. Using fallback script.")
 
-# ---------------------------
-# Hugging Face text generation
-# ---------------------------
 def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7, retries=3):
-    """Generate text using HF model with retries and fallback."""
     model = HF_MODELS[0]
     url = f"https://api-inference.huggingface.co/models/{model}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": prompt, "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}}
-
-    for attempt in range(1, retries + 1):
+    
+    for attempt in range(1, retries+1):
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=60)
             try:
                 data = resp.json()
             except ValueError:
-                raise RuntimeError(f"HF API returned empty or invalid response: {resp.text}")
+                raise RuntimeError(f"HF API returned empty/invalid response: {resp.text}")
             if isinstance(data, list) and "generated_text" in data[0]:
                 print(f"INFO: Model {model} succeeded on attempt {attempt}")
                 return data[0]["generated_text"]
             else:
-                raise RuntimeError(f"Unexpected response from {model}: {data}")
+                raise RuntimeError(f"Unexpected response: {data}")
         except Exception as e:
             print(f"WARNING: Attempt {attempt} failed: {e}", file=sys.stderr)
 
     print("INFO: Using fallback script after retries")
     return f"Fallback script for prompt: {prompt}"
 
-# ---------------------------
-# Main flow
-# ---------------------------
 def main():
-    # Topics
     topics = ["Right to Privacy in India", "AI and Copyright Issues",
               "Latest Supreme Court Judgments", "Consumer Protection Rights",
               "Cybersecurity and Law"]
@@ -56,29 +45,24 @@ def main():
     prompt = f"Write a clear, factual 2-minute YouTube video script on: {topic}."
     script = hf_generate_text(prompt) if HF_API_KEY else f"Fallback script for topic: {topic}"
 
-    # Save script
-    with open("script.txt", "w", encoding="utf-8") as f:
-        f.write(script)
+    with open("script.txt", "w", encoding="utf-8") as f: f.write(script)
     print("INFO: Script saved to script.txt")
 
-    # Convert to audio via gTTS
     tts = gtts.gTTS(script, lang="en")
     tts.save("voice.mp3")
     print("INFO: voice.mp3 created")
 
-    # Background music
     bg_file = "bg_music.mp3"
     if not os.path.exists(bg_file):
         try:
             r = requests.get("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", timeout=30)
             r.raise_for_status()
-            with open(bg_file, "wb") as f:
-                f.write(r.content)
+            with open(bg_file, "wb") as f: f.write(r.content)
             print("INFO: bg_music.mp3 downloaded")
         except Exception as e:
             print(f"WARNING: Could not download bg music: {e}", file=sys.stderr)
 
-    # Merge audio (with FPS fix)
+    # Merge audio with fps fix
     voice = mp.AudioFileClip("voice.mp3")
     if os.path.exists(bg_file):
         bg_music = mp.AudioFileClip(bg_file).subclip(0, min(60, voice.duration + 5))
@@ -88,26 +72,26 @@ def main():
     final_audio.write_audiofile("final_audio.mp3")
     print("INFO: final_audio.mp3 written")
 
-    # Create video with text
+    # Video creation: faster, smaller
     clips = []
     for sentence in script.split("."):
         line = sentence.strip()
-        if not line:
-            continue
-        wrapped = "\n".join(wrap(line, width=40))
-        duration = max(2.5, min(6.0, 2.5 + len(line.split()) / 6.0))
-        txt_clip = mp.TextClip(wrapped, fontsize=40, color="white",
-                               bg_color="black", size=(1280, 720),
-                               method="caption").set_duration(duration)
+        if not line: continue
+        wrapped = "\n".join(wrap(line, width=50))
+        duration = min(4.0, max(2.0, len(line.split())/6.0))  # max 4s per sentence
+        txt_clip = mp.TextClip(wrapped, fontsize=30, color="white",
+                               bg_color="black", size=(640,360), method="caption").set_duration(duration)
         clips.append(txt_clip)
 
-    video = mp.concatenate_videoclips(clips, method="compose")
-    video = video.set_audio(mp.AudioFileClip("final_audio.mp3"))
-    video.write_videofile("final_video.mp4", fps=24)
-    print("INFO: final_video.mp4 created")
+    if clips:
+        video = mp.concatenate_videoclips(clips, method="compose")
+        video = video.set_audio(mp.AudioFileClip("final_audio.mp3"))
+        video.write_videofile("final_video.mp4", fps=24)
+        print("INFO: final_video.mp4 created")
+    else:
+        print("WARNING: No clips created, skipping video generation.")
 
-    # Send to Telegram
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID and clips:
         try:
             tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
             with open("final_video.mp4", "rb") as vid:
@@ -119,8 +103,7 @@ def main():
         except Exception as e:
             print(f"ERROR sending to Telegram: {e}", file=sys.stderr)
     else:
-        print("INFO: Telegram credentials missing; skipping send step.")
-
+        print("INFO: Telegram credentials missing or no video; skipping send step.")
 
 if __name__ == "__main__":
     main()
