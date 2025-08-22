@@ -14,27 +14,35 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 if not HF_API_KEY:
-    print("ERROR: HF_API_KEY not set.")
-    sys.exit(1)
+    print("WARNING: HF_API_KEY not set. Will use fallback script.")
 
 # ---------------------------
 # Hugging Face text generation
 # ---------------------------
-def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7):
+def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7, retries=3):
+    """Try generating text using HF model, safely handle empty or invalid responses."""
     model = HF_MODELS[0]
     url = f"https://api-inference.huggingface.co/models/{model}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": prompt, "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}}
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
-        data = resp.json()
-        if isinstance(data, list) and "generated_text" in data[0]:
-            print(f"INFO: Model {model} succeeded")
-            return data[0]["generated_text"]
-        else:
-            raise RuntimeError(f"Unexpected response from {model}: {data}")
-    except Exception as e:
-        raise RuntimeError(f"HF API call failed: {e}")
+    
+    for attempt in range(1, retries+1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
+            try:
+                data = resp.json()
+            except ValueError:
+                raise RuntimeError(f"HF API returned empty or invalid response: {resp.text}")
+            if isinstance(data, list) and "generated_text" in data[0]:
+                print(f"INFO: Model {model} succeeded on attempt {attempt}")
+                return data[0]["generated_text"]
+            else:
+                raise RuntimeError(f"Unexpected response from {model}: {data}")
+        except Exception as e:
+            print(f"WARNING: Attempt {attempt} failed: {e}", file=sys.stderr)
+    # fallback
+    print("INFO: Using fallback script after retries")
+    return f"Fallback script for prompt: {prompt}"
 
 # ---------------------------
 # Main flow
@@ -48,11 +56,9 @@ def main():
     print("INFO: Generating script for topic:", topic)
 
     prompt = f"Write a clear, factual 2-minute YouTube video script on: {topic}."
-    try:
-        script = hf_generate_text(prompt)
-    except Exception as e:
-        print(f"ERROR generating text: {e}", file=sys.stderr)
-        sys.exit(1)
+    
+    # Generate script (fallback if HF fails)
+    script = hf_generate_text(prompt) if HF_API_KEY else f"Fallback script for topic: {topic}"
 
     # Save script
     with open("script.txt", "w", encoding="utf-8") as f: f.write(script)
