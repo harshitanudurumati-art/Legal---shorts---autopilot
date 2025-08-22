@@ -26,14 +26,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install moviepy gtts requests
+          pip install "moviepy==1.0.3" gtts requests
 
       - name: Verify MoviePy installed
         run: |
-          pip show moviepy
           python -c "import moviepy.editor as mp; print('MoviePy import successful')"
 
-      - name: Debug Hugging Face secret
+      - name: Debug Hugging Face models
         run: |
           echo "HF key length = ${#HF_API_KEY}"
           echo "HF models = EleutherAI/gpt-neo-125M, gpt2, facebook/bart-large-cnn"
