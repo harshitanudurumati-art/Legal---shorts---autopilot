@@ -32,10 +32,17 @@ jobs:
         run: |
           python -c "import moviepy.editor as mp; print('MoviePy import successful')"
 
-      - name: Debug Hugging Face secret
+      - name: Test Hugging Face API Key
         run: |
-          echo "HF key length = ${#HF_API_KEY}"
-          echo "HF model = google/flan-t5-small"
+          if [ -z "$HF_API_KEY" ]; then
+            echo "HF_API_KEY is empty!"
+            exit 1
+          fi
+          echo "Testing Hugging Face API..."
+          curl -s -H "Authorization: Bearer $HF_API_KEY" \
+               -H "Content-Type: application/json" \
+               -d '{"inputs":"Hello world"}' \
+               https://api-inference.huggingface.co/models/google/flan-t5-small | head -n 5
         env:
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
 
