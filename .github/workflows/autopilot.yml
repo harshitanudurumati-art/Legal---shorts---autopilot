@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python and cache pip
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -57,3 +57,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python autopilot.py
+
+      # ✅ Always upload video artifact even if Telegram fails
+      - name: Upload video artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: final-video
+          path: final_video.mp4
