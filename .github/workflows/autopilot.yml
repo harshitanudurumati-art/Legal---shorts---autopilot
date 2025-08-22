@@ -32,6 +32,13 @@ jobs:
         run: |
           python -c "import moviepy.editor as mp; print('MoviePy import successful')"
 
+      - name: Debug Hugging Face secret
+        run: |
+          echo "HF key length = ${#HF_API_KEY}"
+          echo "HF model = google/flan-t5-small"
+        env:
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+
       - name: Run autopilot
         env:
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
