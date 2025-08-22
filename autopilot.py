@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 import os
-import json
+import sys
 import datetime
 import requests
 import moviepy.editor as mp
 import gtts
 from textwrap import wrap
-import sys
 
 # ---------------------------
 # Config
 # ---------------------------
 HF_API_KEY = os.getenv("HF_API_KEY")
-# Use only free API-compatible models
-HF_MODEL = "EleutherAI/gpt-neo-125M"
+# List of free HF Inference API-compatible models
+HF_MODELS = [
+    "EleutherAI/gpt-neo-125M",
+    "gpt2",
+    "facebook/bart-large-cnn"
+]
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -22,25 +25,33 @@ if not HF_API_KEY:
     print("ERROR: HF_API_KEY not set.")
     sys.exit(1)
 
-print("INFO: Using HF_MODEL =", HF_MODEL)
-
 # ---------------------------
 # Hugging Face text generation
 # ---------------------------
 def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7):
-    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}
-    }
-    resp = requests.post(url, headers=headers, json=payload, timeout=60)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Hugging Face API error {resp.status_code}: {resp.text}")
-    data = resp.json()
-    if isinstance(data, list) and "generated_text" in data[0]:
-        return data[0]["generated_text"]
-    raise RuntimeError(f"Unexpected HF API response: {data}")
+    last_error = None
+    for model in HF_MODELS:
+        url = f"https://api-inference.huggingface.co/models/{model}"
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+        payload = {
+            "inputs": prompt,
+            "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list) and "generated_text" in data[0]:
+                    print(f"INFO: Using model {model}")
+                    return data[0]["generated_text"]
+                else:
+                    last_error = f"Unexpected response from {model}: {data}"
+            else:
+                last_error = f"HF API {model} returned {resp.status_code}: {resp.text}"
+        except Exception as e:
+            last_error = str(e)
+        print(f"WARNING: Model {model} failed: {last_error}")
+    raise RuntimeError(f"All models failed. Last error: {last_error}")
 
 # ---------------------------
 # Main flow
@@ -74,7 +85,7 @@ def main():
     tts.save("voice.mp3")
     print("INFO: voice.mp3 created")
 
-    # Download background music if not exists
+    # Background music
     bg_file = "bg_music.mp3"
     if not os.path.exists(bg_file):
         try:
@@ -121,7 +132,7 @@ def main():
     video.write_videofile("final_video.mp4", fps=24)
     print("INFO: final_video.mp4 created")
 
-    # Send to Telegram if credentials provided
+    # Send to Telegram
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
             tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
