@@ -1,11 +1,7 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 """
 autopilot.py -- uses Hugging Face Inference API to generate a script,
 converts it to speech, makes a short video, and sends it to Telegram.
-
-Before running in GitHub Actions:
-  - Add secret HF_API_KEY (your Hugging Face access token) to your repo secrets.
-  - (Optional) Set HF_MODEL env var to a different HF model slug (default: "google/flan-t5-large").
 """
 
 import os
@@ -21,7 +17,15 @@ from textwrap import wrap
 # Config / environment
 # ---------------------------
 HF_API_KEY = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
-HF_MODEL = os.getenv("HF_MODEL", "google/flan-t5-large")   # 👈 default model
+
+# Preferred model (from secrets) or fallback chain
+HF_MODEL = os.getenv("HF_MODEL")
+FALLBACK_MODELS = [
+    "bigscience/bloomz-560m",
+    "distilgpt2",
+    "gpt2"
+]
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -38,38 +42,55 @@ if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
 # ---------------------------
 def hf_generate_text(prompt: str, max_new_tokens: int = 300, temperature: float = 0.4) -> str:
     """
-    Call Hugging Face Inference API (text-generation style) and return generated text.
+    Call Hugging Face Inference API with fallback models.
     """
-    api_url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": max_new_tokens,
-            "temperature": temperature,
-            "return_full_text": False
+    # Build model list (secret first, then fallbacks)
+    models_to_try = [HF_MODEL] if HF_MODEL else []
+    models_to_try.extend(FALLBACK_MODELS)
+
+    last_error = None
+    for model in models_to_try:
+        if not model:
+            continue
+        print(f"INFO: Trying Hugging Face model: {model}")
+        api_url = f"https://api-inference.huggingface.co/models/{model}"
+        headers = {"Authorization": f"Bearer {HF_API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "return_full_text": False
+            }
         }
-    }
-
-    resp = requests.post(api_url, headers=headers, json=payload, timeout=60)
-    if resp.status_code != 200:
         try:
-            err = resp.json()
-        except Exception:
-            err = resp.text
-        raise RuntimeError(f"Hugging Face API error {resp.status_code}: {err}")
+            resp = requests.post(api_url, headers=headers, json=payload, timeout=60)
+            if resp.status_code != 200:
+                try:
+                    err = resp.json()
+                except Exception:
+                    err = resp.text
+                print(f"WARNING: Model {model} failed ({resp.status_code}): {err}", file=sys.stderr)
+                last_error = err
+                continue
 
-    data = resp.json()
-    if isinstance(data, list) and len(data) > 0:
-        first = data[0]
-        if isinstance(first, dict) and "generated_text" in first:
-            return first["generated_text"].strip()
-        if isinstance(first, dict) and "text" in first:
-            return first["text"].strip()
-    if isinstance(data, dict) and "generated_text" in data:
-        return data["generated_text"].strip()
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                first = data[0]
+                if isinstance(first, dict) and "generated_text" in first:
+                    return first["generated_text"].strip()
+                if isinstance(first, dict) and "text" in first:
+                    return first["text"].strip()
+            if isinstance(data, dict) and "generated_text" in data:
+                return data["generated_text"].strip()
 
-    return str(data)
+            return str(data)
+        except Exception as e:
+            print(f"WARNING: Exception with model {model}: {e}", file=sys.stderr)
+            last_error = e
+            continue
+
+    raise RuntimeError(f"All models failed. Last error: {last_error}")
 
 # ---------------------------
 # Main flow
@@ -95,7 +116,6 @@ def main():
     topic = topics[datetime.datetime.now().day % len(topics)]
     prompt = f"Write a clear, factual 2-minute YouTube video script on: {topic}. Use facts, references, and clear explanation. Avoid predictions."
 
-    print("INFO: Generating script with Hugging Face model:", HF_MODEL)
     try:
         script = hf_generate_text(prompt, max_new_tokens=350, temperature=0.4)
     except Exception as e:
@@ -174,5 +194,4 @@ def main():
         print("INFO: Telegram credentials missing; skipping send step.")
 
 if __name__ == "__main__":
-    main()
-        
+    main()           
