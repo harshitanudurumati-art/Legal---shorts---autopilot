@@ -72,15 +72,16 @@ def main():
     final_audio.write_audiofile("final_audio.mp3")
     print("INFO: final_audio.mp3 written")
 
-    # Video creation: faster, smaller
+    # Video creation: safer for GitHub Actions
     clips = []
     for sentence in script.split("."):
         line = sentence.strip()
         if not line: continue
         wrapped = "\n".join(wrap(line, width=50))
         duration = min(4.0, max(2.0, len(line.split())/6.0))  # max 4s per sentence
+        # <-- Fixed: method="label" avoids ImageMagick security error -->
         txt_clip = mp.TextClip(wrapped, fontsize=30, color="white",
-                               bg_color="black", size=(640,360), method="caption").set_duration(duration)
+                               bg_color="black", size=(640,360), method="label").set_duration(duration)
         clips.append(txt_clip)
 
     if clips:
