@@ -28,6 +28,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install moviepy gtts requests
 
+      - name: Verify MoviePy installed
+        run: |
+          pip show moviepy
+          python -c "import moviepy.editor as mp; print('MoviePy import successful')"
+
       - name: Debug Hugging Face secret
         run: |
           echo "HF key length = ${#HF_API_KEY}"
