@@ -7,9 +7,7 @@ from textwrap import wrap
 # ---------------------------
 HF_API_KEY = os.getenv("HF_API_KEY")
 HF_MODELS = [
-    "google/flan-t5-small",
-    "mosaicml/mpt-7b-instruct",
-    "tiiuae/falcon-7b-instruct"
+    "google/flan-t5-small"  # Stable free model
 ]
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -23,38 +21,29 @@ if not HF_API_KEY:
 # Hugging Face text generation
 # ---------------------------
 def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7):
-    last_error = None
-    for model in HF_MODELS:
-        url = f"https://api-inference.huggingface.co/models/{model}"
-        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-        payload = {"inputs": prompt, "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}}
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=60)
-            data = resp.json()
-            if isinstance(data, list):
-                if "generated_text" in data[0]:
-                    print(f"INFO: Model {model} succeeded")
-                    return data[0]["generated_text"]
-                elif "summary_text" in data[0]:
-                    print(f"INFO: Model {model} returned summary_text")
-                    return data[0]["summary_text"]
-            last_error = f"Unexpected response from {model}: {data}"
-        except Exception as e:
-            last_error = str(e)
-        print(f"WARNING: Model {model} failed: {last_error}")
-    raise RuntimeError(f"All models failed. Last error: {last_error}")
+    model = HF_MODELS[0]
+    url = f"https://api-inference.huggingface.co/models/{model}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {"inputs": prompt, "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}}
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        data = resp.json()
+        if isinstance(data, list) and "generated_text" in data[0]:
+            print(f"INFO: Model {model} succeeded")
+            return data[0]["generated_text"]
+        else:
+            raise RuntimeError(f"Unexpected response from {model}: {data}")
+    except Exception as e:
+        raise RuntimeError(f"HF API call failed: {e}")
 
 # ---------------------------
-# Main Flow
+# Main flow
 # ---------------------------
 def main():
-    topics = [
-        "Right to Privacy in India",
-        "AI and Copyright Issues",
-        "Latest Supreme Court Judgments",
-        "Consumer Protection Rights",
-        "Cybersecurity and Law"
-    ]
+    # Topics
+    topics = ["Right to Privacy in India", "AI and Copyright Issues",
+              "Latest Supreme Court Judgments", "Consumer Protection Rights",
+              "Cybersecurity and Law"]
     topic = topics[datetime.datetime.now().day % len(topics)]
     print("INFO: Generating script for topic:", topic)
 
@@ -65,16 +54,16 @@ def main():
         print(f"ERROR generating text: {e}", file=sys.stderr)
         sys.exit(1)
 
-    with open("script.txt", "w", encoding="utf-8") as f:
-        f.write(script)
+    # Save script
+    with open("script.txt", "w", encoding="utf-8") as f: f.write(script)
     print("INFO: Script saved to script.txt")
 
-    # TTS
+    # Convert to audio via gTTS
     tts = gtts.gTTS(script, lang="en")
     tts.save("voice.mp3")
     print("INFO: voice.mp3 created")
 
-    # Background Music
+    # Background music
     bg_file = "bg_music.mp3"
     if not os.path.exists(bg_file):
         try:
@@ -95,7 +84,7 @@ def main():
     final_audio.write_audiofile("final_audio.mp3")
     print("INFO: final_audio.mp3 written")
 
-    # Video Creation
+    # Create video with text
     clips = []
     for sentence in script.split("."):
         line = sentence.strip()
@@ -112,7 +101,7 @@ def main():
     video.write_videofile("final_video.mp4", fps=24)
     print("INFO: final_video.mp4 created")
 
-    # Telegram Upload
+    # Send to Telegram
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
             tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
