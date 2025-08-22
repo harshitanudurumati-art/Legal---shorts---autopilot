@@ -1,127 +1,70 @@
- #!/usr/bin/env python3
-"""
-autopilot.py -- uses Hugging Face Inference API to generate a script,
-converts it to speech, makes a short video, and sends it to Telegram.
-"""
-
+#!/usr/bin/env python3
 import os
-import sys
 import json
 import datetime
 import requests
 import moviepy.editor as mp
 import gtts
 from textwrap import wrap
+import sys
 
 # ---------------------------
-# Config / environment
+# Config
 # ---------------------------
-HF_API_KEY = os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
-
-# Preferred model (from secrets) or fallback chain
-HF_MODEL = os.getenv("HF_MODEL")
-FALLBACK_MODELS = [
-    "bigscience/bloomz-560m",
-    "distilgpt2",
-    "gpt2"
-]
+HF_API_KEY = os.getenv("HF_API_KEY")
+# Use only free API-compatible models
+HF_MODEL = "EleutherAI/gpt-neo-125M"
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Quick sanity checks
 if not HF_API_KEY:
-    print("ERROR: HF_API_KEY not set. Add Hugging Face token to env or GitHub Secrets (HF_API_KEY).", file=sys.stderr)
+    print("ERROR: HF_API_KEY not set.")
     sys.exit(1)
 
-if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-    print("WARNING: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set. Telegram step will fail if not provided.", file=sys.stderr)
+print("INFO: Using HF_MODEL =", HF_MODEL)
 
 # ---------------------------
-# Helpers
+# Hugging Face text generation
 # ---------------------------
-def hf_generate_text(prompt: str, max_new_tokens: int = 300, temperature: float = 0.4) -> str:
-    """
-    Call Hugging Face Inference API with fallback models.
-    """
-    # Build model list (secret first, then fallbacks)
-    models_to_try = [HF_MODEL] if HF_MODEL else []
-    models_to_try.extend(FALLBACK_MODELS)
-
-    last_error = None
-    for model in models_to_try:
-        if not model:
-            continue
-        print(f"INFO: Trying Hugging Face model: {model}")
-        api_url = f"https://api-inference.huggingface.co/models/{model}"
-        headers = {"Authorization": f"Bearer {HF_API_KEY}", "Content-Type": "application/json"}
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": max_new_tokens,
-                "temperature": temperature,
-                "return_full_text": False
-            }
-        }
-        try:
-            resp = requests.post(api_url, headers=headers, json=payload, timeout=60)
-            if resp.status_code != 200:
-                try:
-                    err = resp.json()
-                except Exception:
-                    err = resp.text
-                print(f"WARNING: Model {model} failed ({resp.status_code}): {err}", file=sys.stderr)
-                last_error = err
-                continue
-
-            data = resp.json()
-            if isinstance(data, list) and len(data) > 0:
-                first = data[0]
-                if isinstance(first, dict) and "generated_text" in first:
-                    return first["generated_text"].strip()
-                if isinstance(first, dict) and "text" in first:
-                    return first["text"].strip()
-            if isinstance(data, dict) and "generated_text" in data:
-                return data["generated_text"].strip()
-
-            return str(data)
-        except Exception as e:
-            print(f"WARNING: Exception with model {model}: {e}", file=sys.stderr)
-            last_error = e
-            continue
-
-    raise RuntimeError(f"All models failed. Last error: {last_error}")
+def hf_generate_text(prompt, max_new_tokens=300, temperature=0.7):
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {
+        "inputs": prompt,
+        "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature}
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=60)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Hugging Face API error {resp.status_code}: {resp.text}")
+    data = resp.json()
+    if isinstance(data, list) and "generated_text" in data[0]:
+        return data[0]["generated_text"]
+    raise RuntimeError(f"Unexpected HF API response: {data}")
 
 # ---------------------------
 # Main flow
 # ---------------------------
 def main():
-    # Load topics
-    try:
-        with open("topics.json", "r", encoding="utf-8") as f:
-            topics = json.load(f).get("topics", [])
-    except FileNotFoundError:
-        print("WARNING: topics.json not found — using default topics.", file=sys.stderr)
-        topics = [
-            "Right to Privacy in India",
-            "AI and Copyright Issues",
-            "Latest Supreme Court Judgments",
-            "Consumer Protection Rights",
-            "Cybersecurity and Law"
-        ]
-    if not topics:
-        print("ERROR: topics list is empty.", file=sys.stderr)
-        sys.exit(1)
-
+    # Topics
+    topics = [
+        "Right to Privacy in India",
+        "AI and Copyright Issues",
+        "Latest Supreme Court Judgments",
+        "Consumer Protection Rights",
+        "Cybersecurity and Law"
+    ]
     topic = topics[datetime.datetime.now().day % len(topics)]
-    prompt = f"Write a clear, factual 2-minute YouTube video script on: {topic}. Use facts, references, and clear explanation. Avoid predictions."
+    print("INFO: Generating script for topic:", topic)
 
+    prompt = f"Write a clear, factual 2-minute YouTube video script on: {topic}."
     try:
-        script = hf_generate_text(prompt, max_new_tokens=350, temperature=0.4)
+        script = hf_generate_text(prompt)
     except Exception as e:
         print(f"ERROR generating text: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Save script
     with open("script.txt", "w", encoding="utf-8") as f:
         f.write(script)
     print("INFO: Script saved to script.txt")
@@ -131,7 +74,7 @@ def main():
     tts.save("voice.mp3")
     print("INFO: voice.mp3 created")
 
-    # Background music
+    # Download background music if not exists
     bg_file = "bg_music.mp3"
     if not os.path.exists(bg_file):
         try:
@@ -178,12 +121,17 @@ def main():
     video.write_videofile("final_video.mp4", fps=24)
     print("INFO: final_video.mp4 created")
 
-    # Send to Telegram
+    # Send to Telegram if credentials provided
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
             tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
             with open("final_video.mp4", "rb") as vid:
-                resp = requests.post(tg_url, data={"chat_id": TELEGRAM_CHAT_ID}, files={"video": vid}, timeout=120)
+                resp = requests.post(
+                    tg_url,
+                    data={"chat_id": TELEGRAM_CHAT_ID},
+                    files={"video": vid},
+                    timeout=120
+                )
             if resp.status_code != 200:
                 print(f"WARNING: Telegram API returned {resp.status_code}: {resp.text}", file=sys.stderr)
             else:
@@ -194,4 +142,4 @@ def main():
         print("INFO: Telegram credentials missing; skipping send step.")
 
 if __name__ == "__main__":
-    main()           
+    main()
