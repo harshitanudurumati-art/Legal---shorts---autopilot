@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os, sys, datetime, requests, moviepy.editor as mp, gtts
 from textwrap import wrap
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 HF_API_KEY = os.getenv("HF_API_KEY")
 HF_MODELS = ["google/flan-t5-small"]
@@ -62,7 +64,7 @@ def main():
         except Exception as e:
             print(f"WARNING: Could not download bg music: {e}", file=sys.stderr)
 
-    # Merge audio with fps fix
+    # Merge audio
     voice = mp.AudioFileClip("voice.mp3")
     if os.path.exists(bg_file):
         bg_music = mp.AudioFileClip(bg_file).subclip(0, min(60, voice.duration + 5))
@@ -72,22 +74,25 @@ def main():
     final_audio.write_audiofile("final_audio.mp3")
     print("INFO: final_audio.mp3 written")
 
-    # Video creation using Pillow (avoids ImageMagick issues)
+    # Pillow-based text images
     clips = []
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    font_size = 30
+    font = ImageFont.truetype(font_path, font_size)
+
     for sentence in script.split("."):
         line = sentence.strip()
         if not line: continue
         wrapped = "\n".join(wrap(line, width=50))
+
+        img = Image.new('RGB', (640, 360), color='black')
+        d = ImageDraw.Draw(img)
+        d.text((10, 10), wrapped, font=font, fill=(255, 255, 255))
+
+        frame = np.array(img)
         duration = min(4.0, max(2.0, len(line.split())/6.0))
-        txt_clip = mp.TextClip(
-            wrapped,
-            fontsize=30,
-            color="white",
-            size=(640,360),
-            method="caption",
-            font="DejaVu-Sans"  # Forces Pillow rendering
-        ).set_duration(duration)
-        clips.append(txt_clip)
+        clip = mp.ImageClip(frame).set_duration(duration)
+        clips.append(clip)
 
     if clips:
         video = mp.concatenate_videoclips(clips, method="compose")
@@ -97,7 +102,7 @@ def main():
     else:
         print("WARNING: No clips created, skipping video generation.")
 
-    # Send to Telegram if credentials exist
+    # Telegram
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID and clips:
         try:
             tg_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
