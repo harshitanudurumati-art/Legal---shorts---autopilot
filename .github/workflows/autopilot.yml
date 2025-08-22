@@ -32,13 +32,6 @@ jobs:
         run: |
           python -c "import moviepy.editor as mp; print('MoviePy import successful')"
 
-      - name: Debug Hugging Face models
-        run: |
-          echo "HF key length = ${#HF_API_KEY}"
-          echo "HF models = EleutherAI/gpt-neo-125M, gpt2, facebook/bart-large-cnn"
-        env:
-          HF_API_KEY: ${{ secrets.HF_API_KEY }}
-
       - name: Run autopilot
         env:
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
