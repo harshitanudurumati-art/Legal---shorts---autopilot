@@ -49,6 +49,21 @@ def pick_topic():
         with open(TOPICS_FILE, "r") as f:
             topics = json.load(f)
 
+        # ensure we always have a list
+        if isinstance(topics, dict):
+            debug("topics.json is a dict, converting to list...")
+            topics = list(topics.values())
+        elif not isinstance(topics, list):
+            debug("topics.json format not recognized, using fallback list...")
+            topics = [
+                "Consumer Rights in India",
+                "Digital Privacy Laws",
+                "Employment Law Basics",
+                "Tenant Rights",
+                "Intellectual Property Rights",
+                "Contract Law"
+            ]
+
     topic = random.choice(topics)
     debug(f"Picked topic: {topic}")
     return topic
@@ -123,7 +138,6 @@ def create_video(audio_file, text):
         with open("subs.txt", "w", encoding="utf-8") as f:
             f.write(text)
 
-        # Just attach subtitles using drawtext
         cmd = [
             "ffmpeg", "-y",
             "-i", audio_file,
