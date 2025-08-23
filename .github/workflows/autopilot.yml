@@ -18,10 +18,16 @@ jobs:
       with:
         python-version: '3.9'
         
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg imagemagick
+        
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install requests openai moviepy pillow gtts numpy imageio imageio-ffmpeg
+        pip install --upgrade moviepy
         
     - name: Run autopilot script
       env:
