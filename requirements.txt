@@ -5,3 +5,8 @@ imageio-ffmpeg==0.4.9
 gTTS==2.5.1
 pydub==0.25.1
 requests>=2.31.0
+transformers
+torch
+moviepy
+gtts
+requests
