@@ -472,7 +472,7 @@ class ViralLegalShortsSystem:
         return VideoClip(make_frame, duration=duration).set_fps(self.video_config['fps'])
 
     def create_viral_subtitles(self, script, duration):
-        """Create word-by-word viral subtitles with power word emphasis"""
+        """Create word-by-word viral subtitles with power word emphasis using OpenCV"""
         words = script.split()
         word_duration = duration / len(words)
         subtitle_clips = []
@@ -484,40 +484,43 @@ class ViralLegalShortsSystem:
             is_power_word = any(power in word.upper() for power in self.power_words)
             
             if is_power_word:
-                # Power word styling
-                font_size = self.video_config['font_size_power']
-                color = 'yellow'
-                stroke_color = 'red'
-                stroke_width = 3
                 display_word = f"🔥{word.upper()}🔥"
+                font_scale = 2.5
+                color = (0, 255, 255)  # Yellow in BGR
+                thickness = 4
             else:
-                # Regular word styling
-                font_size = self.video_config['font_size_regular']
-                color = 'white'
-                stroke_color = 'black'
-                stroke_width = 2
                 display_word = word.upper()
+                font_scale = 2.0
+                color = (255, 255, 255)  # White in BGR
+                thickness = 3
             
-            try:
-                # Create text clip
-                txt_clip = TextClip(display_word,
-                                  fontsize=font_size,
-                                  color=color,
-                                  stroke_color=stroke_color,
-                                  stroke_width=stroke_width,
-                                  method='caption',
-                                  size=(self.video_config['width']-100, None),
-                                  align='center').set_start(start_time).set_duration(word_duration).set_position(('center', self.video_config['height']//2 + 200))
+            # Create subtitle clip using OpenCV
+            def make_text_frame(t):
+                # Create transparent frame
+                frame = np.zeros((self.video_config['height'], self.video_config['width'], 3), dtype=np.uint8)
                 
-                subtitle_clips.append(txt_clip)
-            except Exception as e:
-                print(f"Error creating subtitle for word '{word}': {e}")
-                # Fallback without special formatting
-                txt_clip = TextClip(word.upper(),
-                                  fontsize=self.video_config['font_size_regular'],
-                                  color='white',
-                                  method='caption').set_start(start_time).set_duration(word_duration).set_position('center')
-                subtitle_clips.append(txt_clip)
+                # Get text size
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                text_size = cv2.getTextSize(display_word, font, font_scale, thickness)[0]
+                
+                # Calculate position (center horizontally, bottom third vertically)
+                x = (self.video_config['width'] - text_size[0]) // 2
+                y = int(self.video_config['height'] * 0.75)
+                
+                # Draw text outline (black)
+                cv2.putText(frame, display_word, (x-2, y-2), font, font_scale, (0, 0, 0), thickness+2, cv2.LINE_AA)
+                cv2.putText(frame, display_word, (x+2, y+2), font, font_scale, (0, 0, 0), thickness+2, cv2.LINE_AA)
+                cv2.putText(frame, display_word, (x-2, y+2), font, font_scale, (0, 0, 0), thickness+2, cv2.LINE_AA)
+                cv2.putText(frame, display_word, (x+2, y-2), font, font_scale, (0, 0, 0), thickness+2, cv2.LINE_AA)
+                
+                # Draw main text
+                cv2.putText(frame, display_word, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+                
+                return frame
+            
+            # Create video clip for this word
+            text_clip = VideoClip(make_text_frame, duration=word_duration).set_start(start_time)
+            subtitle_clips.append(text_clip)
         
         return subtitle_clips
 
