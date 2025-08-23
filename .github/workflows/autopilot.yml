@@ -8,7 +8,7 @@ on:
 jobs:
   generate-video:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     
     steps:
     - name: Checkout repository
@@ -17,57 +17,17 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.9'
         
     - name: Install system dependencies
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq ffmpeg imagemagick
-        ffmpeg -version
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg fonts-dejavu-core
         
-    - name: Upgrade pip and install wheel
+    - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip setuptools wheel
-        
-    - name: Install core dependencies first
-      run: |
-        pip install --no-cache-dir numpy
-        pip install --no-cache-dir pillow
-        pip install --no-cache-dir requests
-        
-    - name: Install media dependencies
-      run: |
-        pip install --no-cache-dir imageio
-        pip install --no-cache-dir imageio-ffmpeg
-        pip install --no-cache-dir decorator
-        pip install --no-cache-dir tqdm
-        pip install --no-cache-dir proglog
-        
-    - name: Install MoviePy with specific version
-      run: |
-        pip install --no-cache-dir moviepy==1.0.3
-        
-    - name: Install remaining dependencies
-      run: |
-        pip install --no-cache-dir openai
-        pip install --no-cache-dir gtts
-        
-    - name: Test all imports
-      run: |
-        python -c "
-        try:
-            import numpy; print('✓ numpy OK')
-            import PIL; print('✓ PIL OK') 
-            import requests; print('✓ requests OK')
-            import moviepy; print('✓ moviepy OK')
-            import moviepy.editor as mp; print('✓ moviepy.editor OK')
-            import openai; print('✓ openai OK')
-            import gtts; print('✓ gtts OK')
-            print('All imports successful!')
-        except Exception as e:
-            print(f'Import error: {e}')
-            exit(1)
-        "
+        pip install --upgrade pip
+        pip install requests pillow gtts
         
     - name: Run autopilot script
       env:
@@ -75,15 +35,15 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.HF_API_KEY }}
       run: python autopilot.py
       
     - name: Upload generated content
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: legal-video-content-${{ github.run_number }}
+        name: legal-video-content
         path: |
           *.mp4
           *.json
           *.txt
-        retention-days: 30
