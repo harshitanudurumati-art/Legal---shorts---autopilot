@@ -1,1053 +1,961 @@
+#!/usr/bin/env python3
 import cv2
 import numpy as np
 from moviepy.editor import *
-from moviepy.config import check_and_download_cmd
-import pyttsx3
 import os
-from datetime import datetime, timedelta
 import json
-import math
 import random
+from datetime import datetime, timedelta
+import requests
+from PIL import Image, ImageDraw, ImageFont
+import math
+import tempfile
+import sys
 
-class ViralLegalShortsCreator:
+# Configure MoviePy to avoid download issues
+os.environ['IMAGEIO_FFMPEG_EXE'] = '/usr/bin/ffmpeg'
+
+class ViralLegalShortsSystem:
     def __init__(self):
-        self.width = 1080
-        self.height = 1920
-        self.fps = 30
-        self.video_duration = 55  # Optimal for YouTube Shorts
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.output_dir = os.path.join(self.base_dir, "output")
+        self.video_dir = os.path.join(self.output_dir, "videos")
+        self.audio_dir = os.path.join(self.output_dir, "audio")
+        self.thumbnail_dir = os.path.join(self.output_dir, "thumbnails")
+        self.logs_dir = os.path.join(self.base_dir, "logs")
         
-        # 8-Day Rotation System with 3 variations each
-        self.topics_cycle = [
-            {
-                "topic": "Consumer Rights Protection Laws",
-                "theme": "corporate_lawsuit",
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "Amazon just paid customers $100 MILLION",
-                        "case": "Amazon Ring privacy settlement",
-                        "amount": "$100 million",
-                        "power_words": ["AMAZON", "MILLION", "PRIVACY", "SETTLEMENT"]
-                    },
-                    {
-                        "angle": "Hidden Rights", 
-                        "hook": "You have HIDDEN consumer rights worth THOUSANDS",
-                        "case": "Product liability protection laws",
-                        "amount": "Up to $50,000",
-                        "power_words": ["HIDDEN", "THOUSANDS", "PROTECTION", "LIABILITY"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "This ONE law could save you $5000 annually",
-                        "case": "Credit card protection rights",
-                        "amount": "$5,000",
-                        "power_words": ["SAVE", "ANNUALLY", "PROTECTION", "CREDIT"]
-                    }
-                ]
-            },
-            {
-                "topic": "Labor and Employment Law",
-                "theme": "workplace_justice",
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "Tesla paid employees $137 MILLION for this",
-                        "case": "Tesla racial discrimination settlement",
-                        "amount": "$137 million", 
-                        "power_words": ["TESLA", "MILLION", "DISCRIMINATION", "EMPLOYEES"]
-                    },
-                    {
-                        "angle": "Hidden Rights",
-                        "hook": "Your boss CAN'T do this - it's ILLEGAL",
-                        "case": "Overtime and break violations",
-                        "amount": "Double pay",
-                        "power_words": ["ILLEGAL", "BOSS", "OVERTIME", "VIOLATIONS"]
-                    },
-                    {
-                        "angle": "Money Saving", 
-                        "hook": "Know these rights before signing ANY job contract",
-                        "case": "Employment contract protections",
-                        "amount": "Career protection",
-                        "power_words": ["CONTRACT", "PROTECTIONS", "CAREER", "RIGHTS"]
-                    }
-                ]
-            },
-            {
-                "topic": "Data Privacy and Cybersecurity Laws",
-                "theme": "cyber_tech",
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "Facebook paid $5.1 BILLION for violating THIS law",
-                        "case": "Meta GDPR privacy violations",
-                        "amount": "$5.1 billion",
-                        "power_words": ["FACEBOOK", "BILLION", "VIOLATING", "PRIVACY"]
-                    },
-                    {
-                        "angle": "Hidden Rights",
-                        "hook": "Delete ALL your data with this ONE request",
-                        "case": "Right to be forgotten laws", 
-                        "amount": "Complete erasure",
-                        "power_words": ["DELETE", "DATA", "FORGOTTEN", "ERASURE"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Your personal data is worth $2000 - here's how to claim it",
-                        "case": "Data monetization rights",
-                        "amount": "$2,000",
-                        "power_words": ["PERSONAL", "WORTH", "CLAIM", "MONETIZATION"]
-                    }
-                ]
-            },
-            {
-                "topic": "Corporate Law and Business Regulations",
-                "theme": "corporate_lawsuit", 
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "This CEO got 30 YEARS for breaking corporate law",
-                        "case": "Theranos fraud conviction",
-                        "amount": "30 years prison",
-                        "power_words": ["CEO", "YEARS", "FRAUD", "PRISON"]
-                    },
-                    {
-                        "angle": "Hidden Rights",
-                        "hook": "Shareholders have SECRET rights companies hide",
-                        "case": "Minority shareholder protections",
-                        "amount": "Legal remedies",
-                        "power_words": ["SHAREHOLDERS", "SECRET", "HIDE", "MINORITY"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Small businesses can LEGALLY avoid this $50K tax",
-                        "case": "Small business tax exemptions",
-                        "amount": "$50,000",
-                        "power_words": ["LEGALLY", "AVOID", "TAX", "EXEMPTIONS"]
-                    }
-                ]
-            },
-            {
-                "topic": "Family Law and Domestic Relations",
-                "theme": "family_justice",
-                "variations": [
-                    {
-                        "angle": "Recent Cases", 
-                        "hook": "Divorce settlements are changing - $2M case proves it",
-                        "case": "High-asset divorce precedent",
-                        "amount": "$2 million",
-                        "power_words": ["DIVORCE", "CHANGING", "MILLION", "PRECEDENT"]
-                    },
-                    {
-                        "angle": "Hidden Rights",
-                        "hook": "Parents have HIDDEN custody rights lawyers don't mention",
-                        "case": "Parental rights in custody battles",
-                        "amount": "Full custody",
-                        "power_words": ["HIDDEN", "CUSTODY", "LAWYERS", "PARENTAL"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Avoid $25K in legal fees with this ONE document",
-                        "case": "Prenuptial agreement benefits", 
-                        "amount": "$25,000",
-                        "power_words": ["AVOID", "FEES", "DOCUMENT", "PRENUPTIAL"]
-                    }
-                ]
-            },
-            {
-                "topic": "Criminal Law and Legal Procedures",
-                "theme": "justice_system",
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "Criminal conviction OVERTURNED after 20 years using this law",
-                        "case": "DNA evidence exoneration laws",
-                        "amount": "20 years freedom",
-                        "power_words": ["OVERTURNED", "YEARS", "DNA", "EXONERATION"]
-                    },
-                    {
-                        "angle": "Hidden Rights", 
-                        "hook": "Police CAN'T arrest you for this - know your rights",
-                        "case": "Fourth Amendment protections",
-                        "amount": "Constitutional rights",
-                        "power_words": ["ARREST", "RIGHTS", "AMENDMENT", "CONSTITUTIONAL"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Public defenders are FREE but here's the catch",
-                        "case": "Right to legal representation",
-                        "amount": "Free legal aid",
-                        "power_words": ["FREE", "CATCH", "DEFENDERS", "REPRESENTATION"]
-                    }
-                ]
-            },
-            {
-                "topic": "Intellectual Property Law",
-                "theme": "innovation_protection",
-                "variations": [
-                    {
-                        "angle": "Recent Cases",
-                        "hook": "Apple vs Samsung: $1 BILLION patent war explained",
-                        "case": "Design patent infringement",
-                        "amount": "$1 billion",
-                        "power_words": ["APPLE", "SAMSUNG", "BILLION", "PATENT"]
-                    },
-                    {
-                        "angle": "Hidden Rights",
-                        "hook": "Your IDEAS are legally protected - even without patents",
-                        "case": "Trade secret protections",
-                        "amount": "Unlimited protection",
-                        "power_words": ["IDEAS", "PROTECTED", "PATENTS", "SECRET"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Protect your invention for $320 instead of $10,000",
-                        "case": "Provisional patent applications",
-                        "amount": "$9,680 saved",
-                        "power_words": ["PROTECT", "INVENTION", "INSTEAD", "PROVISIONAL"]
-                    }
-                ]
-            },
-            {
-                "topic": "AI Tools for Legal Professionals and Students",
-                "theme": "legal_tech",
-                "variations": [
-                    {
-                        "angle": "Recent Tools",
-                        "hook": "AI lawyer just won a $50,000 case - here's the tool",
-                        "case": "LegalTech AI case victories",
-                        "amount": "$50,000",
-                        "power_words": ["AI", "LAWYER", "WON", "TOOL"]
-                    },
-                    {
-                        "angle": "Hidden Features",
-                        "hook": "ChatGPT has HIDDEN legal features lawyers pay $500/hour for",
-                        "case": "AI legal research capabilities", 
-                        "amount": "$500/hour",
-                        "power_words": ["CHATGPT", "HIDDEN", "LAWYERS", "PAY"]
-                    },
-                    {
-                        "angle": "Money Saving",
-                        "hook": "Law students: Replace $200/hour tutors with these FREE AI tools",
-                        "case": "AI study and research tools",
-                        "amount": "$200/hour saved",
-                        "power_words": ["STUDENTS", "REPLACE", "FREE", "TOOLS"]
-                    }
-                ]
-            }
+        # Create directories
+        for directory in [self.output_dir, self.video_dir, self.audio_dir, self.thumbnail_dir, self.logs_dir]:
+            os.makedirs(directory, exist_ok=True)
+        
+        # 8-topic rotation system
+        self.topics = [
+            "consumer_rights", "labor_employment", "data_privacy", "corporate_law",
+            "family_law", "criminal_law", "intellectual_property", "ai_legal_tools"
         ]
         
-        # Current day tracker for rotation
-        self.start_date = datetime.now()
+        # Power words for viral emphasis
+        self.power_words = [
+            "MILLION", "BILLION", "LAWSUIT", "ILLEGAL", "BANNED", "FIRED", "ARRESTED", 
+            "SUED", "VIOLATION", "PENALTY", "SETTLEMENT", "VERDICT", "GUILTY", "YEARS"
+        ]
         
-    def get_current_topic(self):
-        """8-day rotation system with 3 variations"""
-        days_passed = (datetime.now() - self.start_date).days
-        topic_index = (days_passed // 8) % len(self.topics_cycle)
-        variation_index = days_passed % 3
-        
-        current_topic = self.topics_cycle[topic_index]
-        current_variation = current_topic["variations"][variation_index]
-        
-        return {
-            "topic": current_topic["topic"],
-            "theme": current_topic["theme"], 
-            "variation": current_variation,
-            "day": days_passed + 1,
-            "cycle": f"Day {(days_passed % 8) + 1}/8"
+        # Video specifications
+        self.video_config = {
+            'width': 1080,
+            'height': 1920,
+            'fps': 30,
+            'duration': 55,
+            'font_size_regular': 70,
+            'font_size_power': 85
         }
+
+    def get_current_topic(self):
+        """Get current topic based on 8-day rotation"""
+        start_date = datetime(2024, 1, 1)
+        days_passed = (datetime.now() - start_date).days
+        topic_index = days_passed % 8
+        variation = (days_passed // 8) % 3
+        
+        return self.topics[topic_index], variation
+
+    def get_content_data(self, topic, variation):
+        """Get content data for specific topic and variation"""
+        content_database = {
+            "consumer_rights": {
+                0: {
+                    "title": "Amazon Paid $100 MILLION - Here's Why",
+                    "hook": "Amazon just paid $100 MILLION in fines!",
+                    "key_points": [
+                        "Amazon charged Prime members without consent",
+                        "FTC fined them $100 MILLION dollars",
+                        "Customers got automatic refunds",
+                        "This violates consumer protection laws",
+                        "You can report similar violations to FTC"
+                    ],
+                    "shocking_fact": "Amazon made $469 billion in 2021 but still tried to overcharge customers",
+                    "call_to_action": "Check your subscriptions NOW for unauthorized charges!"
+                },
+                1: {
+                    "title": "This Company Owes You Money - Check Now!",
+                    "hook": "Millions of people are owed money and don't know it!",
+                    "key_points": [
+                        "Class action settlements often go unclaimed",
+                        "Facebook paid $725 MILLION in privacy settlement",
+                        "Google paid $391 MILLION for location tracking",
+                        "Check if you qualify for compensation",
+                        "Deadlines are usually strict - act fast!"
+                    ],
+                    "shocking_fact": "Over $3 BILLION in settlements go unclaimed every year",
+                    "call_to_action": "Search 'class action settlement' + your state now!"
+                },
+                2: {
+                    "title": "Your Rights When Companies Scam You",
+                    "hook": "Companies bank on you NOT knowing your rights!",
+                    "key_points": [
+                        "You can dispute charges within 60 days",
+                        "Companies must honor their advertised prices",
+                        "Bait and switch tactics are ILLEGAL",
+                        "Document everything for evidence",
+                        "Small claims court is your friend"
+                    ],
+                    "shocking_fact": "98% of people never exercise their consumer rights",
+                    "call_to_action": "Know your rights - save this video!"
+                }
+            },
+            "labor_employment": {
+                0: {
+                    "title": "Tesla Paid $137 MILLION - Workplace Discrimination",
+                    "hook": "Tesla just paid $137 MILLION for discrimination!",
+                    "key_points": [
+                        "Employee faced racial harassment at Tesla",
+                        "Company failed to address complaints",
+                        "Jury awarded $137 MILLION in damages",
+                        "This sets precedent for workplace rights",
+                        "Document all discrimination incidents"
+                    ],
+                    "shocking_fact": "Workplace discrimination costs companies $64 billion annually",
+                    "call_to_action": "Know your workplace rights - report discrimination!"
+                },
+                1: {
+                    "title": "Your Boss CAN'T Do This - It's ILLEGAL",
+                    "hook": "Your boss is breaking the law if they do this!",
+                    "key_points": [
+                        "Can't ask about pregnancy in interviews",
+                        "Can't retaliate for filing complaints",
+                        "Must pay overtime over 40 hours",
+                        "Can't discriminate based on religion",
+                        "Must provide reasonable accommodations"
+                    ],
+                    "shocking_fact": "73% of workers don't know basic employment rights",
+                    "call_to_action": "Share this to protect workers' rights!"
+                },
+                2: {
+                    "title": "Wage Theft: $50 BILLION Stolen Annually",
+                    "hook": "$50 BILLION stolen from workers every year!",
+                    "key_points": [
+                        "Unpaid overtime is wage theft",
+                        "Off-the-clock work is ILLEGAL",
+                        "Tip stealing violates federal law",
+                        "You can recover stolen wages plus penalties",
+                        "File complaints with Department of Labor"
+                    ],
+                    "shocking_fact": "Wage theft exceeds all other property crimes combined",
+                    "call_to_action": "Calculate your stolen wages - you might be owed thousands!"
+                }
+            },
+            "data_privacy": {
+                0: {
+                    "title": "Meta Paid $5.1 BILLION GDPR Fine",
+                    "hook": "Facebook's parent company paid $5.1 BILLION!",
+                    "key_points": [
+                        "Meta violated GDPR privacy regulations",
+                        "Largest privacy fine in history",
+                        "Your data is worth more than you think",
+                        "EU gives you right to delete your data",
+                        "Companies must ask permission first"
+                    ],
+                    "shocking_fact": "Your personal data is worth $1,000+ annually to tech companies",
+                    "call_to_action": "Review your privacy settings on all platforms NOW!"
+                },
+                1: {
+                    "title": "Your Phone is Spying - Here's Proof",
+                    "hook": "Your phone listens even when you think it's off!",
+                    "key_points": [
+                        "Location tracking continues when 'disabled'",
+                        "Microphone activates for ad targeting",
+                        "Apps share data with 1000+ companies",
+                        "Delete data from Google and Apple",
+                        "Use privacy-focused alternatives"
+                    ],
+                    "shocking_fact": "Average smartphone shares data with 1,200 companies",
+                    "call_to_action": "Turn off location services and microphone access now!"
+                },
+                2: {
+                    "title": "Data Brokers Sell Your Info for $100s",
+                    "hook": "Companies sell your personal data for hundreds!",
+                    "key_points": [
+                        "Data brokers collect without permission",
+                        "They sell to insurance and employers",
+                        "Your SSN sells for $1-$15 on dark web",
+                        "Credit reports affect your life",
+                        "You can opt out of most databases"
+                    ],
+                    "shocking_fact": "There are 4,000+ data broker companies operating legally",
+                    "call_to_action": "Opt out of data brokers - protect your privacy!"
+                }
+            },
+            "corporate_law": {
+                0: {
+                    "title": "This CEO Got 30 YEARS in Prison",
+                    "hook": "CEO sentenced to 30 YEARS for corporate fraud!",
+                    "key_points": [
+                        "Theranos CEO Elizabeth Holmes convicted",
+                        "Defrauded investors of $900 MILLION",
+                        "Fake blood testing technology",
+                        "Put patients' lives at risk",
+                        "Corporate executives aren't above the law"
+                    ],
+                    "shocking_fact": "Only 3% of corporate criminals serve jail time",
+                    "call_to_action": "Corporate accountability matters - stay informed!"
+                },
+                1: {
+                    "title": "Shareholders Can Sue CEOs Personally",
+                    "hook": "Shareholders are suing CEOs for BILLIONS!",
+                    "key_points": [
+                        "Derivative lawsuits hold executives accountable",
+                        "CEOs can be personally liable for damages",
+                        "Breach of fiduciary duty has consequences",
+                        "Shareholders recovered $7.4 BILLION in 2022",
+                        "Even board members face personal liability"
+                    ],
+                    "shocking_fact": "CEO compensation has grown 1,400% since 1978",
+                    "call_to_action": "If you own stocks, know your shareholder rights!"
+                },
+                2: {
+                    "title": "Corporate Whistleblowers Get $100M+ Rewards",
+                    "hook": "This whistleblower got $114 MILLION reward!",
+                    "key_points": [
+                        "SEC paid $114 MILLION to one whistleblower",
+                        "Protected under federal law",
+                        "Can't be fired for reporting violations",
+                        "10-30% of penalties go to whistleblowers",
+                        "Anonymous reporting is allowed"
+                    ],
+                    "shocking_fact": "SEC has paid $1.3 BILLION to whistleblowers since 2012",
+                    "call_to_action": "See corporate fraud? Report it - you're protected!"
+                }
+            },
+            "family_law": {
+                0: {
+                    "title": "Hidden Assets in Divorce - $1M Found",
+                    "hook": "Spouse hid $1 MILLION in divorce - here's how!",
+                    "key_points": [
+                        "Cryptocurrency wallets are often hidden",
+                        "Offshore accounts require investigation",
+                        "Business valuations can be manipulated",
+                        "Forensic accountants find hidden money",
+                        "Hiding assets is contempt of court"
+                    ],
+                    "shocking_fact": "30% of spouses hide assets during divorce proceedings",
+                    "call_to_action": "Protect yourself - hire a forensic accountant!"
+                },
+                1: {
+                    "title": "Child Support Can Be Modified - Here's How",
+                    "hook": "You can change child support amounts legally!",
+                    "key_points": [
+                        "Income changes justify modifications",
+                        "Job loss requires immediate action",
+                        "Medical expenses affect calculations",
+                        "Custody changes impact support",
+                        "Don't wait - file promptly"
+                    ],
+                    "shocking_fact": "$33 BILLION in child support goes uncollected annually",
+                    "call_to_action": "Know your rights - modifications are possible!"
+                },
+                2: {
+                    "title": "Prenups Save MILLIONS in Divorce",
+                    "hook": "This prenup saved $50 MILLION in divorce!",
+                    "key_points": [
+                        "Prenups protect business ownership",
+                        "Separate property stays separate",
+                        "Alimony can be limited or waived",
+                        "Must be fair and properly executed",
+                        "Both parties need separate lawyers"
+                    ],
+                    "shocking_fact": "Divorce costs average $15,000 per person without prenup",
+                    "call_to_action": "Protect your assets - consider a prenuptial agreement!"
+                }
+            },
+            "criminal_law": {
+                0: {
+                    "title": "Know Your Rights - Police Can't Do This",
+                    "hook": "Police violated rights - $2.3 MILLION settlement!",
+                    "key_points": [
+                        "You have the right to remain silent",
+                        "Can't search without warrant or consent",
+                        "Must read Miranda rights during arrest",
+                        "Illegal evidence gets thrown out",
+                        "Document all police interactions"
+                    ],
+                    "shocking_fact": "Police misconduct costs taxpayers $2 BILLION annually",
+                    "call_to_action": "Know your rights - they protect you!"
+                },
+                1: {
+                    "title": "Expungement Can Clear Your Record",
+                    "hook": "Clear your criminal record - it's possible!",
+                    "key_points": [
+                        "Many crimes can be expunged",
+                        "Waiting periods vary by state",
+                        "Background checks won't show expunged records",
+                        "Improves employment opportunities",
+                        "Lawyer not always required"
+                    ],
+                    "shocking_fact": "70 million Americans have criminal records affecting employment",
+                    "call_to_action": "Check if you qualify for expungement!"
+                },
+                2: {
+                    "title": "Self-Defense Laws Vary by State",
+                    "hook": "Self-defense laws could save or destroy you!",
+                    "key_points": [
+                        "Stand Your Ground vs Duty to Retreat",
+                        "Castle Doctrine protects home defense",
+                        "Must be proportional to threat",
+                        "Document evidence immediately",
+                        "Call 911 even if attacker flees"
+                    ],
+                    "shocking_fact": "Self-defense cases vary 400% in outcome by state",
+                    "call_to_action": "Know your state's self-defense laws!"
+                }
+            },
+            "intellectual_property": {
+                0: {
+                    "title": "This Patent Made $1 BILLION - Here's How",
+                    "hook": "One patent generated $1 BILLION in royalties!",
+                    "key_points": [
+                        "Pharmaceutical patents are extremely valuable",
+                        "Patent trolls make millions licensing",
+                        "20-year protection from filing date",
+                        "International filing multiplies value",
+                        "Prior art research is crucial"
+                    ],
+                    "shocking_fact": "Patent litigation costs exceed $29 BILLION annually",
+                    "call_to_action": "Have an invention? File a patent application!"
+                },
+                1: {
+                    "title": "Trademark Your Business Name NOW",
+                    "hook": "Lost business name cost $500,000 - here's why!",
+                    "key_points": [
+                        "Federal trademarks beat state registrations",
+                        "Domain names don't equal trademark rights",
+                        "Use it or lose it rule applies",
+                        "Infringement damages can be triple",
+                        "Registration takes 8-12 months"
+                    ],
+                    "shocking_fact": "85% of small businesses don't trademark their names",
+                    "call_to_action": "Protect your brand - file trademark application!"
+                },
+                2: {
+                    "title": "Copyright Infringement: $150K Per Work",
+                    "hook": "Copyright violation cost $150,000 PER WORK!",
+                    "key_points": [
+                        "Automatic copyright on creative works",
+                        "Registration required for lawsuit",
+                        "Statutory damages up to $150,000",
+                        "Fair use has strict limitations",
+                        "DMCA takedowns work fast"
+                    ],
+                    "shocking_fact": "Copyright infringement costs creators $29.2 BILLION yearly",
+                    "call_to_action": "Register your copyrights - protect your creations!"
+                }
+            },
+            "ai_legal_tools": {
+                0: {
+                    "title": "AI Lawyer Won $50,000 Case",
+                    "hook": "AI lawyer just won a $50,000 case!",
+                    "key_points": [
+                        "DoNotPay AI fights parking tickets",
+                        "ChatGPT helps draft legal documents",
+                        "AI analyzes contracts in minutes",
+                        "Legal research became 10x faster",
+                        "Still need human lawyer oversight"
+                    ],
+                    "shocking_fact": "AI legal tools reduce legal costs by 70%",
+                    "call_to_action": "Try AI legal tools - but verify with lawyers!"
+                },
+                1: {
+                    "title": "Legal Research Just Got 1000x Faster",
+                    "hook": "What took lawyers weeks now takes minutes!",
+                    "key_points": [
+                        "Westlaw and LexisNexis have AI search",
+                        "Case law analysis in seconds",
+                        "Contract review identifies risks",
+                        "Legal briefs write themselves",
+                        "Lawyers who don't adapt will lose"
+                    ],
+                    "shocking_fact": "AI can review contracts 60% faster than lawyers",
+                    "call_to_action": "Law students: Learn AI tools or fall behind!"
+                },
+                2: {
+                    "title": "Will AI Replace Lawyers? The Answer",
+                    "hook": "AI replacing lawyers? Here's the TRUTH!",
+                    "key_points": [
+                        "Routine work gets automated first",
+                        "Complex litigation still needs humans",
+                        "Client relations remain crucial",
+                        "Ethical judgment can't be programmed",
+                        "AI augments rather than replaces"
+                    ],
+                    "shocking_fact": "23% of lawyer tasks can be automated with current AI",
+                    "call_to_action": "Lawyers: Embrace AI or become irrelevant!"
+                }
+            }
+        }
+        
+        return content_database[topic][variation]
 
     def create_animated_background(self, theme, duration):
-        """Create professional animated backgrounds based on theme"""
-        
-        def corporate_lawsuit_bg(t):
-            # Corporate theme: Moving gradients with legal symbols
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Dynamic gradient
-            gradient_shift = int(50 * math.sin(t * 0.3))
-            for y in range(self.height):
-                # Corporate blue to gold gradient
-                blue_intensity = max(0, min(255, 60 + gradient_shift + y // 8))
-                gold_intensity = max(0, min(255, 40 + y // 12))
-                frame[y, :] = [blue_intensity, gold_intensity, 120]
-            
-            # Add moving legal symbols overlay
-            symbol_y = int(self.height * 0.3 + 100 * math.sin(t * 0.5))
-            # Scale symbol overlay
-            if 100 < symbol_y < self.height - 100:
-                cv2.circle(frame, (self.width//2, symbol_y), 30, (255, 215, 0), 2)
-                
-            return frame
-            
-        def cyber_tech_bg(t):
-            # Matrix-style moving code effect
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Dark tech background
-            frame[:, :] = [10, 25, 45]  # Dark blue base
-            
-            # Moving matrix lines
-            for i in range(0, self.width, 80):
-                line_offset = int(100 * math.sin(t * 0.4 + i * 0.01))
-                start_y = (line_offset % self.height)
-                cv2.line(frame, (i, start_y), (i, start_y + 200), (0, 255, 100), 1)
-                
-            # Tech particles
-            for _ in range(20):
-                x = random.randint(0, self.width)
-                y = int((random.random() * self.height + t * 50) % self.height)
-                cv2.circle(frame, (x, y), 2, (0, 200, 255), -1)
-                
-            return frame
-            
-        def workplace_justice_bg(t):
-            # Professional office theme with justice elements  
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Professional gradient (navy to silver)
-            for y in range(self.height):
-                navy = max(0, min(255, 80 + y // 15))
-                silver = max(0, min(255, 60 + y // 20))
-                frame[y, :] = [navy, silver, navy + 20]
-                
-            # Moving scales of justice effect
-            scale_x = int(self.width * 0.5 + 200 * math.cos(t * 0.3))
-            if 100 < scale_x < self.width - 100:
-                cv2.rectangle(frame, (scale_x-30, self.height//2-20), 
-                            (scale_x+30, self.height//2+20), (255, 215, 0), 2)
-                            
-            return frame
-            
-        def family_justice_bg(t):
-            # Warm, family-oriented theme
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Warm gradient
-            for y in range(self.height):
-                warm_red = max(0, min(255, 80 + y // 12))
-                warm_orange = max(0, min(255, 60 + y // 15))
-                frame[y, :] = [120, warm_orange, warm_red]
-                
-            return frame
-            
-        def justice_system_bg(t):
-            # Classical justice theme
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Classical columns effect
-            for y in range(self.height):
-                classical_blue = max(0, min(255, 70 + y // 10))
-                frame[y, :] = [classical_blue, classical_blue + 20, 150]
-                
-            return frame
-            
-        def innovation_protection_bg(t):
-            # Tech innovation theme
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # Innovation gradient
-            for y in range(self.height):
-                tech_green = max(0, min(255, 50 + y // 10))
-                tech_blue = max(0, min(255, 70 + y // 12))
-                frame[y, :] = [tech_green, tech_blue, 200]
-                
-            return frame
-            
-        def legal_tech_bg(t):
-            # AI/Tech legal theme
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            
-            # AI theme: Purple to blue gradient
-            for y in range(self.height):
-                ai_purple = max(0, min(255, 100 + y // 8))
-                ai_blue = max(0, min(255, 80 + y // 10))
-                frame[y, :] = [ai_blue, 60, ai_purple]
-                
-            # Neural network effect
-            network_y = int(self.height * 0.4 + 50 * math.sin(t * 0.6))
-            cv2.circle(frame, (self.width//3, network_y), 15, (255, 255, 255), 1)
-            cv2.circle(frame, (2*self.width//3, network_y + 50), 15, (255, 255, 255), 1)
-            cv2.line(frame, (self.width//3, network_y), 
-                    (2*self.width//3, network_y + 50), (255, 255, 255), 1)
-                
-            return frame
-
-        # Theme mapping
-        theme_functions = {
-            "corporate_lawsuit": corporate_lawsuit_bg,
-            "cyber_tech": cyber_tech_bg, 
-            "workplace_justice": workplace_justice_bg,
-            "family_justice": family_justice_bg,
-            "justice_system": justice_system_bg,
-            "innovation_protection": innovation_protection_bg,
-            "legal_tech": legal_tech_bg
-        }
-        
-        bg_function = theme_functions.get(theme, corporate_lawsuit_bg)
-        
-        # Create video clip from frames
+        """Create theme-specific animated background"""
         def make_frame(t):
-            return bg_function(t)
+            # Create base canvas
+            frame = np.zeros((self.video_config['height'], self.video_config['width'], 3), dtype=np.uint8)
             
-        return VideoFileClip("", duration=duration).set_make_frame(make_frame)
+            if theme == "corporate":
+                # Corporate blue gradient with moving elements
+                for y in range(self.video_config['height']):
+                    intensity = int(127 + 50 * math.sin(0.01 * y + t))
+                    frame[y, :] = [intensity//4, intensity//2, intensity]
+                
+                # Add moving corporate symbols
+                center_x, center_y = self.video_config['width']//2, self.video_config['height']//2
+                for i in range(3):
+                    angle = t * 0.5 + i * 2.09
+                    x = int(center_x + 200 * math.cos(angle))
+                    y = int(center_y + 200 * math.sin(angle))
+                    if 0 <= x < self.video_config['width'] and 0 <= y < self.video_config['height']:
+                        cv2.circle(frame, (x, y), 30, (100, 150, 255), -1)
+            
+            elif theme == "justice":
+                # Justice theme with scales and gavel
+                # Golden gradient background
+                for y in range(self.video_config['height']):
+                    intensity = int(80 + 30 * math.sin(0.005 * y + t * 0.5))
+                    frame[y, :] = [intensity//3, intensity//2, intensity]
+                
+                # Moving scales of justice pattern
+                for i in range(5):
+                    y_pos = int(200 + 300 * i + 50 * math.sin(t + i))
+                    cv2.rectangle(frame, (400, y_pos), (680, y_pos + 40), (200, 180, 100), -1)
+            
+            elif theme == "cyber":
+                # Cybersecurity matrix theme
+                frame.fill(5)  # Dark background
+                
+                # Matrix rain effect
+                for x in range(0, self.video_config['width'], 20):
+                    drop_pos = int((t * 100 + x * 3) % (self.video_config['height'] + 100))
+                    if drop_pos < self.video_config['height']:
+                        intensity = max(0, 255 - abs(drop_pos - self.video_config['height']//2))
+                        cv2.circle(frame, (x, drop_pos), 3, (0, intensity, 0), -1)
+            
+            elif theme == "tech":
+                # Technology/AI theme
+                # Neural network visualization
+                frame[:, :] = [10, 10, 30]  # Dark blue base
+                
+                # Animated neural connections
+                nodes = [(200, 300), (500, 200), (800, 400), (600, 600), (300, 700)]
+                for i, (x1, y1) in enumerate(nodes):
+                    for j, (x2, y2) in enumerate(nodes[i+1:], i+1):
+                        intensity = int(100 + 50 * math.sin(t + i + j))
+                        cv2.line(frame, (x1, y1), (x2, y2), (0, intensity, intensity//2), 2)
+                    
+                    # Pulsing nodes
+                    pulse = int(20 + 10 * math.sin(t * 2 + i))
+                    cv2.circle(frame, (x1, y1), pulse, (0, 200, 255), -1)
+            
+            else:  # default/legal
+                # Professional legal theme
+                for y in range(self.video_config['height']):
+                    intensity = int(60 + 20 * math.sin(0.003 * y + t * 0.3))
+                    frame[y, :] = [intensity, intensity, intensity + 40]
+                
+                # Moving legal symbols
+                for i in range(4):
+                    x = int(200 + 700 * (i / 3) + 50 * math.sin(t + i))
+                    y = int(400 + 200 * math.sin(t * 0.7 + i))
+                    cv2.rectangle(frame, (x-20, y-20), (x+20, y+20), (150, 150, 200), -1)
+            
+            return frame
+        
+        return VideoFileClip("dummy").set_duration(duration).set_fps(self.video_config['fps']).set_make_frame(make_frame)
 
-    def generate_audio(self, script, filename):
-        """Generate professional narration"""
-        engine = pyttsx3.init()
+    def create_viral_subtitles(self, script, duration):
+        """Create word-by-word viral subtitles with power word emphasis"""
+        words = script.split()
+        word_duration = duration / len(words)
+        subtitle_clips = []
         
-        # Professional voice settings
-        voices = engine.getProperty('voices')
-        if voices and len(voices) > 1:
-            engine.setProperty('voice', voices[1].id)  # Usually female voice
+        for i, word in enumerate(words):
+            start_time = i * word_duration
+            
+            # Check if word is a power word
+            is_power_word = any(power in word.upper() for power in self.power_words)
+            
+            if is_power_word:
+                # Power word styling
+                font_size = self.video_config['font_size_power']
+                color = 'yellow'
+                stroke_color = 'red'
+                stroke_width = 3
+                display_word = f"🔥{word.upper()}🔥"
+            else:
+                # Regular word styling
+                font_size = self.video_config['font_size_regular']
+                color = 'white'
+                stroke_color = 'black'
+                stroke_width = 2
+                display_word = word.upper()
+            
+            try:
+                # Create text clip
+                txt_clip = TextClip(display_word,
+                                  fontsize=font_size,
+                                  color=color,
+                                  stroke_color=stroke_color,
+                                  stroke_width=stroke_width,
+                                  method='caption',
+                                  size=(self.video_config['width']-100, None),
+                                  align='center').set_start(start_time).set_duration(word_duration).set_position(('center', self.video_config['height']//2 + 200))
+                
+                subtitle_clips.append(txt_clip)
+            except Exception as e:
+                print(f"Error creating subtitle for word '{word}': {e}")
+                # Fallback without special formatting
+                txt_clip = TextClip(word.upper(),
+                                  fontsize=self.video_config['font_size_regular'],
+                                  color='white',
+                                  method='caption').set_start(start_time).set_duration(word_duration).set_position('center')
+                subtitle_clips.append(txt_clip)
         
-        engine.setProperty('rate', 160)  # Optimal speaking rate
-        engine.setProperty('volume', 0.9)
-        
-        engine.save_to_file(script, filename)
-        engine.runAndWait()
-        
-        return filename
+        return subtitle_clips
 
     def create_background_music(self, theme, duration):
         """Create theme-appropriate background music"""
+        # Simple tone generation for background music
         sample_rate = 44100
+        samples = int(sample_rate * duration)
         
-        def generate_chord_progression(base_freq, duration, theme_type):
-            """Generate professional chord progressions"""
-            if theme_type == "corporate_lawsuit":
-                # Professional, authoritative
-                frequencies = [base_freq, base_freq * 1.25, base_freq * 1.5]  # Major chord
-            elif theme_type == "cyber_tech":
-                # Futuristic, tech
-                frequencies = [base_freq * 0.8, base_freq * 1.2, base_freq * 1.6]
-            elif theme_type == "workplace_justice":
-                # Determined, strong
-                frequencies = [base_freq, base_freq * 1.3, base_freq * 1.6]
-            else:
-                # Default professional
-                frequencies = [base_freq, base_freq * 1.25, base_freq * 1.5]
-                
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            audio = np.zeros_like(t)
-            
-            for freq in frequencies:
-                # Add harmonics and subtle modulation
-                wave = np.sin(2 * np.pi * freq * t) * 0.3
-                wave += np.sin(2 * np.pi * freq * 2 * t) * 0.1  # Octave harmonic
-                audio += wave
-                
-            # Add reverb effect
-            audio = np.convolve(audio, np.exp(-np.arange(1000) * 0.01), mode='same')[:len(t)]
-            
-            return audio
-            
-        # Generate music based on theme
-        base_freq = 220  # A3 note
-        audio = generate_chord_progression(base_freq, duration, theme)
+        # Create basic chord progression based on theme
+        if theme == "corporate":
+            frequencies = [261.63, 329.63, 392.00, 523.25]  # C major progression
+        elif theme == "justice":
+            frequencies = [293.66, 369.99, 440.00, 587.33]  # D major progression
+        elif theme == "cyber":
+            frequencies = [220.00, 277.18, 329.63, 440.00]  # A minor progression
+        else:
+            frequencies = [261.63, 329.63, 392.00, 523.25]  # Default C major
         
-        # Normalize and convert to audio clip
-        audio = audio / np.max(np.abs(audio)) * 0.3  # Keep volume low for background
+        # Generate simple background tone
+        t = np.linspace(0, duration, samples)
+        audio = np.zeros(samples)
         
-        from moviepy.audio.io.AudioFileClip import AudioArrayClip
-        return AudioArrayClip(audio, fps=sample_rate)
+        for i, freq in enumerate(frequencies):
+            wave = 0.1 * np.sin(2 * np.pi * freq * t) * np.exp(-t/10)  # Decaying tone
+            audio += wave
+        
+        # Normalize audio
+        audio = audio / np.max(np.abs(audio)) * 0.3  # 30% volume for background
+        
+        # Create temporary audio file
+        temp_audio_path = os.path.join(self.audio_dir, f"bg_music_{theme}.wav")
+        
+        # Save audio using scipy if available, otherwise skip music
+        try:
+            from scipy.io import wavfile
+            wavfile.write(temp_audio_path, sample_rate, (audio * 32767).astype(np.int16))
+            return AudioFileClip(temp_audio_path)
+        except ImportError:
+            print("Scipy not available, skipping background music")
+            return None
 
-    def create_viral_subtitles(self, script, audio_clip, power_words):
-        """Create word-by-word viral subtitles with power word emphasis"""
-        words = script.split()
-        word_clips = []
-        
-        # Calculate timing for each word
-        total_duration = audio_clip.duration
-        time_per_word = total_duration / len(words)
-        
-        for i, word in enumerate(words):
-            start_time = i * time_per_word
-            end_time = (i + 1) * time_per_word
-            
-            # Check if it's a power word
-            is_power_word = any(pw.lower() in word.lower() for pw in power_words)
-            
-            if is_power_word:
-                # Power word styling: Large, yellow, red border, flames
-                subtitle = (TextClip(f"🔥{word.upper()}🔥", 
-                                   fontsize=85, 
-                                   font='Arial-Bold',
-                                   color='yellow',
-                                   stroke_color='red',
-                                   stroke_width=3)
-                           .set_position('center')
-                           .set_start(start_time)
-                           .set_duration(end_time - start_time))
-            else:
-                # Regular word styling
-                subtitle = (TextClip(word.upper(), 
-                                   fontsize=70,
-                                   font='Arial-Bold', 
-                                   color='white',
-                                   stroke_color='black',
-                                   stroke_width=2)
-                           .set_position('center')
-                           .set_start(start_time)
-                           .set_duration(end_time - start_time))
-                           
-            word_clips.append(subtitle)
-            
-        return word_clips
-
-    def create_viral_video(self, output_filename):
-        """Create complete viral legal short"""
-        
-        # Get current topic based on rotation
-        current_content = self.get_current_topic()
-        topic = current_content["topic"]
-        theme = current_content["theme"] 
-        variation = current_content["variation"]
-        
-        print(f"Creating video: {topic}")
-        print(f"Theme: {theme}")
-        print(f"Variation: {variation['angle']}")
-        print(f"Rotation: {current_content['cycle']}")
-        
-        # Create script with viral elements
-        script = self.create_viral_script(topic, variation)
-        
-        # Generate professional audio
-        audio_filename = "temp_narration.wav"
-        self.generate_audio(script, audio_filename)
-        audio_clip = AudioFileClip(audio_filename)
-        
-        # Ensure exactly 55 seconds
-        if audio_clip.duration > self.video_duration:
-            audio_clip = audio_clip.subclip(0, self.video_duration)
-        elif audio_clip.duration < self.video_duration:
-            # Loop audio if needed
-            loops_needed = int(self.video_duration / audio_clip.duration) + 1
-            audio_clip = concatenate_audioclips([audio_clip] * loops_needed)
-            audio_clip = audio_clip.subclip(0, self.video_duration)
-        
-        # Create animated background
-        background = self.create_animated_background(theme, self.video_duration)
-        
-        # Create background music
-        bg_music = self.create_background_music(theme, self.video_duration)
-        
-        # Mix audio with background music  
-        final_audio = CompositeAudioClip([
-            audio_clip.volumex(1.0),  # Full volume narration
-            bg_music.volumex(0.3)     # Low volume music
-        ])
-        
-        # Create viral subtitles
-        subtitle_clips = self.create_viral_subtitles(script, audio_clip, variation["power_words"])
-        
-        # Add title overlay
-        title_clip = (TextClip(topic.upper(), 
-                              fontsize=45,
-                              font='Arial-Bold',
-                              color='white',
-                              stroke_color='black',
-                              stroke_width=2)
-                     .set_position(('center', 100))
-                     .set_duration(3))
-        
-        # Composite final video
-        final_video = CompositeVideoClip([
-            background,
-            title_clip,
-            *subtitle_clips
-        ]).set_audio(final_audio).set_duration(self.video_duration)
-        
-        # Export with professional settings
-        final_video.write_videofile(
-            output_filename,
-            fps=self.fps,
-            codec='libx264',
-            audio_codec='aac',
-            temp_audiofile='temp-audio.m4a',
-            remove_temp=True
-        )
-        
-        # Cleanup
-        os.remove(audio_filename)
-        
-        # Generate complete marketing package
-        marketing_package = self.create_marketing_package(current_content)
-        
-        return {
-            "video_file": output_filename,
-            "topic": topic,
-            "theme": theme,
-            "variation": variation["angle"],
-            "marketing": marketing_package,
-            "rotation_info": current_content
-        }
-
-    def create_viral_script(self, topic, variation):
-        """Create engaging 55-second scripts with viral elements"""
-        hook = variation["hook"]
-        case = variation["case"]
-        amount = variation["amount"]
-        
-        # Templates for different angles
-        if variation["angle"] == "Recent Cases":
-            script = f"""{hook}. This landmark case shows how {case} resulted in {amount}. 
-            Here's what every person needs to know about this law. The implications affect millions of people daily. 
-            Understanding these legal principles could protect your rights and potentially save you thousands. 
-            Make sure you know these critical details before it's too late."""
-            
-        elif variation["angle"] == "Hidden Rights":
-            script = f"""{hook}. Most people don't realize that {case} gives you {amount} in protection. 
-            These hidden legal rights could be worth thousands to you. Corporations don't want you to know this information. 
-            Here's exactly how to use these rights to your advantage. Knowledge of these laws is power and money in your pocket."""
-            
-        elif variation["angle"] == "Money Saving":
-            script = f"""{hook}. Smart people use {case} to secure {amount} in benefits. 
-            This legal strategy could save you massive amounts of money. Most people pay expensive lawyers for this information. 
-            But you can protect yourself by understanding these simple legal principles. Take action before you miss these opportunities."""
-            
-        return script
-
-    def create_marketing_package(self, content_info):
-        """Generate complete viral marketing package"""
-        topic = content_info["topic"]
-        variation = content_info["variation"]
-        
-        # Viral title suggestions
+    def create_marketing_package(self, content_data, topic):
+        """Create complete marketing package"""
         titles = [
-            f"🔥 {variation['hook']} - VIRAL LEGAL SHORTS",
-            f"💰 {topic}: {variation['amount']} Case Explained", 
-            f"⚖️ LAWYERS DON'T WANT YOU TO KNOW THIS - {topic}",
-            f"🚨 BREAKING: {variation['case']} - What You Need to Know",
-            f"💥 {topic} - This Changes Everything!"
+            content_data['title'],
+            content_data['hook'],
+            f"🚨 {content_data['shocking_fact'][:50]}...",
+            f"Legal Alert: {topic.replace('_', ' ').title()}",
+            f"💰 This Will Save You Money - {topic.replace('_', ' ').title()}"
         ]
         
-        # Optimized description
-        description = f"""🔥 VIRAL LEGAL SHORTS - {topic}
+        description = f"""
+{content_data['hook']}
 
-{variation['hook']}
+Key Points:
+{chr(10).join([f'• {point}' for point in content_data['key_points']])}
 
-📊 KEY DETAILS:
-• Case: {variation['case']}
-• Impact: {variation['amount']}
-• Legal Area: {topic}
+🔥 SHOCKING FACT: {content_data['shocking_fact']}
 
-🎯 WHAT YOU'LL LEARN:
-• Your hidden legal rights
-• How to protect yourself
-• Real case examples and outcomes
-• Money-saving legal strategies
+{content_data['call_to_action']}
 
-⚖️ DISCLAIMER: This content is for educational purposes only. Not legal advice. Consult a qualified attorney for your specific situation.
+⚖️ LEGAL DISCLAIMER: This content is for educational purposes only and does not constitute legal advice. Consult with a qualified attorney for specific legal matters.
 
-🔔 SUBSCRIBE for daily legal knowledge that could save you thousands!
-
-#LegalRights #ViralLegal #LegalAdvice #ConsumerRights #LegalEducation #Shorts #ViralShorts #LegalTips #Money #Rights"""
-
-        # Power hashtags
+#LegalAdvice #KnowYourRights #LegalEducation #ConsumerRights #{topic.title().replace('_', '')}
+        """
+        
         hashtags = [
-            "#LegalRights", "#ViralLegal", "#LegalAdvice", "#ConsumerRights", 
-            "#LegalEducation", "#Shorts", "#ViralShorts", "#LegalTips",
-            "#Money", "#Rights", "#Legal", "#Law", "#Justice", "#Protection",
-            "#KnowYourRights", f"#{topic.replace(' ', '')}"
+            f"#{topic.replace('_', '').title()}", "#LegalAdvice", "#KnowYourRights", 
+            "#LegalEducation", "#LawyerTips", "#LegalShorts", "#ConsumerRights",
+            "#EmploymentLaw", "#CorporateLaw", "#FamilyLaw"
         ]
         
         return {
-            "titles": titles,
-            "description": description,
-            "hashtags": hashtags,
-            "upload_time": "7:30 PM IST (Peak engagement time)",
-            "engagement_strategy": [
-                "Pin a comment asking viewers about their legal experiences",
-                "Cross-post to Instagram Reels and TikTok within 30 minutes",
-                "Respond to comments within first 2 hours for algorithm boost",
-                "Create follow-up video based on most asked questions",
-                "Use community tab to poll audience on next topics"
-            ],
-            "follow_up_ideas": [
-                f"Part 2: More details about {variation['case']}",
-                f"Viewer Q&A: {topic} Questions Answered", 
-                f"How to take action: {topic} Step-by-step guide",
-                f"Similar cases: Other {topic} examples",
-                f"Update: Latest {topic} developments"
-            ]
+            'titles': titles,
+            'description': description.strip(),
+            'hashtags': hashtags,
+            'upload_time': '19:30',  # 7:30 PM IST
+            'engagement_strategy': f"Post at 7:30 PM IST for maximum engagement. Focus on {topic.replace('_', ' ')} audience."
         }
+
+    def generate_video(self, topic=None, variation=None):
+        """Generate complete viral legal short"""
+        try:
+            # Get current topic and variation
+            if topic is None or variation is None:
+                current_topic, current_variation = self.get_current_topic()
+            else:
+                current_topic, current_variation = topic, variation
+            
+            print(f"Generating video for {current_topic} (variation {current_variation})")
+            
+            # Get content data
+            content_data = self.get_content_data(current_topic, current_variation)
+            
+            # Create script
+            script_parts = [
+                content_data['hook'],
+                ' '.join(content_data['key_points'][:3]),  # First 3 key points
+                content_data['shocking_fact'],
+                content_data['call_to_action']
+            ]
+            script = ' '.join(script_parts)
+            
+            # Determine theme for animations
+            theme_mapping = {
+                'consumer_rights': 'corporate',
+                'labor_employment': 'corporate', 
+                'data_privacy': 'cyber',
+                'corporate_law': 'corporate',
+                'family_law': 'legal',
+                'criminal_law': 'justice',
+                'intellectual_property': 'legal',
+                'ai_legal_tools': 'tech'
+            }
+            theme = theme_mapping.get(current_topic, 'legal')
+            
+            print("Creating animated background...")
+            # Create animated background
+            background = self.create_animated_background(theme, self.video_config['duration'])
+            
+            print("Creating viral subtitles...")
+            # Create viral subtitles
+            subtitles = self.create_viral_subtitles(script, self.video_config['duration'])
+            
+            print("Creating background music...")
+            # Create background music
+            bg_music = self.create_background_music(theme, self.video_config['duration'])
+            
+            print("Compositing final video...")
+            # Compose final video
+            video_clips = [background] + subtitles
+            final_video = CompositeVideoClip(video_clips, size=(self.video_config['width'], self.video_config['height']))
+            
+            # Add background music if available
+            if bg_music:
+                final_video = final_video.set_audio(bg_music)
+            
+            # Generate output filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_filename = f"legal_short_{current_topic}_{current_variation}_{timestamp}.mp4"
+            output_path = os.path.join(self.video_dir, output_filename)
+            
+            print(f"Exporting video to {output_path}...")
+            # Export video with optimized settings
+            final_video.write_videofile(
+                output_path,
+                fps=self.video_config['fps'],
+                codec='libx264',
+                audio_codec='aac',
+                temp_audiofile='temp-audio.m4a',
+                remove_temp=True,
+                verbose=False,
+                logger=None
+            )
+            
+            # Generate marketing package
+            marketing = self.create_marketing_package(content_data, current_topic)
+            
+            # Save marketing package
+            marketing_filename = f"marketing_{current_topic}_{current_variation}_{timestamp}.json"
+            marketing_path = os.path.join(self.output_dir, marketing_filename)
+            
+            with open(marketing_path, 'w') as f:
+                json.dump(marketing, f, indent=2)
+            
+            # Create thumbnail
+            thumbnail_path = self.create_thumbnail(content_data, current_topic, timestamp)
+            
+            # Log generation
+            log_data = {
+                'timestamp': timestamp,
+                'topic': current_topic,
+                'variation': current_variation,
+                'video_path': output_path,
+                'marketing_path': marketing_path,
+                'thumbnail_path': thumbnail_path,
+                'script_length': len(script.split()),
+                'duration': self.video_config['duration'],
+                'theme': theme
+            }
+            
+            log_filename = f"generation_log_{timestamp}.json"
+            log_path = os.path.join(self.logs_dir, log_filename)
+            
+            with open(log_path, 'w') as f:
+                json.dump(log_data, f, indent=2)
+            
+            print(f"✅ Video generated successfully!")
+            print(f"📹 Video: {output_path}")
+            print(f"📋 Marketing: {marketing_path}")
+            print(f"🖼️ Thumbnail: {thumbnail_path}")
+            print(f"📊 Log: {log_path}")
+            
+            return {
+                'success': True,
+                'video_path': output_path,
+                'marketing_path': marketing_path,
+                'thumbnail_path': thumbnail_path,
+                'content_data': content_data
+            }
+            
+        except Exception as e:
+            error_log = {
+                'timestamp': datetime.now().isoformat(),
+                'error': str(e),
+                'topic': current_topic if 'current_topic' in locals() else 'unknown',
+                'variation': current_variation if 'current_variation' in locals() else 'unknown'
+            }
+            
+            error_filename = f"error_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            error_path = os.path.join(self.logs_dir, error_filename)
+            
+            with open(error_path, 'w') as f:
+                json.dump(error_log, f, indent=2)
+            
+            print(f"❌ Error generating video: {e}")
+            print(f"📋 Error logged to: {error_path}")
+            
+            return {'success': False, 'error': str(e)}
+
+    def create_thumbnail(self, content_data, topic, timestamp):
+        """Create eye-catching thumbnail"""
+        try:
+            # Create thumbnail image
+            img = Image.new('RGB', (1280, 720), color=(20, 25, 40))  # Dark background
+            draw = ImageDraw.Draw(img)
+            
+            # Try to use a basic font, fallback to default
+            try:
+                font_large = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 60)
+                font_medium = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 40)
+            except:
+                font_large = ImageFont.load_default()
+                font_medium = ImageFont.load_default()
+            
+            # Add title text
+            title_text = content_data['title'][:50] + "..." if len(content_data['title']) > 50 else content_data['title']
+            
+            # Draw text with outline effect
+            x, y = 50, 100
+            outline_color = (255, 0, 0)  # Red outline
+            text_color = (255, 255, 255)  # White text
+            
+            # Draw outline
+            for dx in [-2, 0, 2]:
+                for dy in [-2, 0, 2]:
+                    if dx != 0 or dy != 0:
+                        draw.text((x+dx, y+dy), title_text, font=font_large, fill=outline_color)
+            
+            # Draw main text
+            draw.text((x, y), title_text, font=font_large, fill=text_color)
+            
+            # Add topic badge
+            topic_display = topic.replace('_', ' ').title()
+            draw.rectangle([50, 50, 300, 90], fill=(255, 215, 0))  # Gold background
+            draw.text((60, 60), topic_display, font=font_medium, fill=(0, 0, 0))
+            
+            # Add shocking fact
+            if len(content_data['shocking_fact']) > 0:
+                fact_text = "💥 " + content_data['shocking_fact'][:80] + "..."
+                draw.text((50, 600), fact_text, font=font_medium, fill=(255, 255, 0))
+            
+            # Save thumbnail
+            thumbnail_filename = f"thumbnail_{topic}_{timestamp}.png"
+            thumbnail_path = os.path.join(self.thumbnail_dir, thumbnail_filename)
+            img.save(thumbnail_path)
+            
+            return thumbnail_path
+            
+        except Exception as e:
+            print(f"Warning: Could not create thumbnail: {e}")
+            return None
+
+    def show_menu(self):
+        """Display interactive menu"""
+        print("\n🔥 VIRAL LEGAL SHORTS AUTOPILOT SYSTEM 🔥")
+        print("=" * 50)
+        print("1. 🚀 Generate Today's Video (Auto-topic)")
+        print("2. 📊 Show Topic Rotation Schedule") 
+        print("3. 🎯 Generate Specific Topic")
+        print("4. 📈 View Generation Statistics")
+        print("5. 🧹 Clean Output Directory")
+        print("6. ❌ Exit")
+        print("=" * 50)
+
+    def show_topic_schedule(self):
+        """Show 8-day topic rotation schedule"""
+        print("\n📅 8-DAY TOPIC ROTATION SCHEDULE")
+        print("=" * 40)
+        
+        start_date = datetime(2024, 1, 1)
+        current_date = datetime.now()
+        days_passed = (current_date - start_date).days
+        current_position = days_passed % 8
+        
+        for i, topic in enumerate(self.topics):
+            status = ">>> CURRENT <<<" if i == current_position else ""
+            variation = (days_passed // 8) % 3
+            print(f"Day {i+1}: {topic.replace('_', ' ').title()} (Variation {variation + 1}) {status}")
+        
+        print(f"\nCurrent cycle day: {current_position + 1}")
+        print(f"Current variation set: {(days_passed // 8) % 3 + 1}")
+
+    def generate_specific_topic(self):
+        """Generate video for specific topic"""
+        print("\n🎯 SELECT TOPIC:")
+        for i, topic in enumerate(self.topics):
+            print(f"{i+1}. {topic.replace('_', ' ').title()}")
+        
+        try:
+            choice = int(input("\nEnter topic number (1-8): ")) - 1
+            if 0 <= choice < len(self.topics):
+                variation = int(input("Enter variation (1-3): ")) - 1
+                if 0 <= variation < 3:
+                    topic = self.topics[choice]
+                    print(f"\nGenerating {topic} (variation {variation + 1})...")
+                    return self.generate_video(topic, variation)
+                else:
+                    print("Invalid variation number!")
+            else:
+                print("Invalid topic number!")
+        except ValueError:
+            print("Invalid input!")
+        
+        return None
+
+    def view_statistics(self):
+        """View generation statistics"""
+        print("\n📈 GENERATION STATISTICS")
+        print("=" * 30)
+        
+        # Count files in directories
+        videos = len([f for f in os.listdir(self.video_dir) if f.endswith('.mp4')])
+        thumbnails = len([f for f in os.listdir(self.thumbnail_dir) if f.endswith('.png')])
+        marketing_files = len([f for f in os.listdir(self.output_dir) if f.startswith('marketing_')])
+        log_files = len([f for f in os.listdir(self.logs_dir) if f.endswith('.json')])
+        
+        print(f"📹 Videos generated: {videos}")
+        print(f"🖼️ Thumbnails created: {thumbnails}")
+        print(f"📋 Marketing packages: {marketing_files}")
+        print(f"📊 Log entries: {log_files}")
+        
+        # Show recent activity
+        if log_files > 0:
+            print("\n🕒 Recent Activity:")
+            log_files_list = sorted([f for f in os.listdir(self.logs_dir) if f.startswith('generation_log_')], reverse=True)[:5]
+            
+            for log_file in log_files_list:
+                try:
+                    with open(os.path.join(self.logs_dir, log_file), 'r') as f:
+                        log_data = json.load(f)
+                        print(f"  • {log_data['topic']} (v{log_data['variation'] + 1}) - {log_data['timestamp']}")
+                except:
+                    pass
+
+    def clean_output_directory(self):
+        """Clean output directory"""
+        confirm = input("\n⚠️ This will delete all generated content. Continue? (yes/no): ")
+        if confirm.lower() == 'yes':
+            import shutil
+            
+            for directory in [self.video_dir, self.audio_dir, self.thumbnail_dir]:
+                shutil.rmtree(directory, ignore_errors=True)
+                os.makedirs(directory, exist_ok=True)
+            
+            # Clean marketing files from output directory
+            for file in os.listdir(self.output_dir):
+                if file.startswith('marketing_'):
+                    os.remove(os.path.join(self.output_dir, file))
+            
+            print("✅ Output directory cleaned!")
+        else:
+            print("❌ Cancelled.")
+
+    def run(self):
+        """Main application loop"""
+        while True:
+            self.show_menu()
+            
+            try:
+                choice = input("\nEnter your choice (1-6): ").strip()
+                
+                if choice == '1':
+                    print("\n🚀 Generating today's viral legal short...")
+                    result = self.generate_video()
+                    if result['success']:
+                        print(f"\n🎉 SUCCESS! Video ready for upload!")
+                        print(f"Upload at 7:30 PM IST for maximum engagement!")
+                    
+                elif choice == '2':
+                    self.show_topic_schedule()
+                    
+                elif choice == '3':
+                    self.generate_specific_topic()
+                    
+                elif choice == '4':
+                    self.view_statistics()
+                    
+                elif choice == '5':
+                    self.clean_output_directory()
+                    
+                elif choice == '6':
+                    print("\n👋 Thanks for using Viral Legal Shorts System!")
+                    break
+                    
+                else:
+                    print("❌ Invalid choice! Please enter 1-6.")
+                    
+            except KeyboardInterrupt:
+                print("\n\n👋 Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Unexpected error: {e}")
+            
+            input("\nPress Enter to continue...")
 
 def main():
-    print("🎬 VIRAL LEGAL SHORTS CREATOR - PROFESSIONAL SYSTEM")
-    print("=" * 60)
-    
-    creator = ViralLegalShortsCreator()
-    
-    while True:
-        print("\n📺 CREATE VIRAL LEGAL SHORT:")
-        print("1. Generate today's video (Auto-rotation system)")
-        print("2. View current rotation status")
-        print("3. Create specific topic video")
-        print("4. Exit")
+    """Main entry point"""
+    try:
+        system = ViralLegalShortsSystem()
         
-        choice = input("\nSelect option (1-4): ")
-        
-        if choice == "1":
-            try:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_file = f"viral_legal_short_{timestamp}.mp4"
-                
-                print("\n🎬 Creating viral legal short...")
-                print("⏳ This may take a few minutes for professional quality...")
-                
-                result = creator.create_viral_video(output_file)
-                
-                print(f"\n✅ VIRAL VIDEO CREATED: {result['video_file']}")
-                print(f"📚 Topic: {result['topic']}")
-                print(f"🎨 Theme: {result['theme']}")
-                print(f"📐 Angle: {result['variation']}")
-                print(f"🔄 Rotation: {result['rotation_info']['cycle']}")
-                
-                print("\n📱 MARKETING PACKAGE:")
-                print("📋 Titles:")
-                for title in result['marketing']['titles'][:3]:
-                    print(f"   • {title}")
-                
-                print(f"\n⏰ Optimal Upload Time: {result['marketing']['upload_time']}")
-                print(f"📊 Engagement Strategy: {len(result['marketing']['engagement_strategy'])} tactics included")
-                print(f"💡 Follow-up Ideas: {len(result['marketing']['follow_up_ideas'])} suggestions ready")
-                
-            except Exception as e:
-                print(f"❌ Error creating video: {str(e)}")
-                print("🔧 Check your system dependencies and try again")
-                
-        elif choice == "2":
-            current = creator.get_current_topic()
-            print(f"\n📊 CURRENT ROTATION STATUS:")
-            print(f"🗓️ Day: {current['day']}")
-            print(f"🔄 Cycle: {current['cycle']}")
-            print(f"📚 Topic: {current['topic']}")
-            print(f"🎨 Theme: {current['theme']}")
-            print(f"📐 Today's Angle: {current['variation']['angle']}")
-            print(f"🎯 Hook: {current['variation']['hook']}")
-            print(f"💰 Amount: {current['variation']['amount']}")
-            
-            print(f"\n📅 UPCOMING SCHEDULE:")
-            for i in range(1, 8):
-                future_date = datetime.now() + timedelta(days=i)
-                days_from_start = (future_date - creator.start_date).days
-                topic_idx = (days_from_start // 8) % len(creator.topics_cycle)
-                var_idx = days_from_start % 3
-                upcoming_topic = creator.topics_cycle[topic_idx]
-                upcoming_var = upcoming_topic["variations"][var_idx]
-                print(f"   Day +{i}: {upcoming_topic['topic']} - {upcoming_var['angle']}")
-                
-        elif choice == "3":
-            print(f"\n📚 SELECT TOPIC:")
-            for i, topic_info in enumerate(creator.topics_cycle, 1):
-                print(f"{i}. {topic_info['topic']}")
-                
-            try:
-                topic_choice = int(input(f"\nSelect topic (1-{len(creator.topics_cycle)}): ")) - 1
-                if 0 <= topic_choice < len(creator.topics_cycle):
-                    
-                    selected_topic = creator.topics_cycle[topic_choice]
-                    print(f"\n📐 SELECT VARIATION:")
-                    for i, var in enumerate(selected_topic["variations"], 1):
-                        print(f"{i}. {var['angle']}: {var['hook']}")
-                        
-                    var_choice = int(input(f"\nSelect variation (1-3): ")) - 1
-                    if 0 <= var_choice < 3:
-                        
-                        # Temporarily override the current content
-                        original_start = creator.start_date
-                        # Set dates to force specific topic/variation
-                        target_days = topic_choice * 8 + var_choice
-                        creator.start_date = datetime.now() - timedelta(days=target_days)
-                        
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        output_file = f"viral_legal_custom_{timestamp}.mp4"
-                        
-                        print(f"\n🎬 Creating custom viral video...")
-                        print("⏳ This may take a few minutes for professional quality...")
-                        
-                        result = creator.create_viral_video(output_file)
-                        
-                        # Restore original date
-                        creator.start_date = original_start
-                        
-                        print(f"\n✅ CUSTOM VIDEO CREATED: {result['video_file']}")
-                        print(f"📚 Topic: {result['topic']}")
-                        print(f"🎨 Theme: {result['theme']}")
-                        print(f"📐 Angle: {result['variation']}")
-                        
-                    else:
-                        print("❌ Invalid variation selection")
-                else:
-                    print("❌ Invalid topic selection")
-                    
-            except ValueError:
-                print("❌ Please enter a valid number")
-                
-        elif choice == "4":
-            print("\n👋 Thank you for using Viral Legal Shorts Creator!")
-            print("🚀 Your viral legal content awaits!")
-            break
-            
+        # Check if running in automated mode (GitHub Actions)
+        if len(sys.argv) > 1 and sys.argv[1] == '--auto':
+            print("🤖 Running in automated mode...")
+            result = system.generate_video()
+            if result['success']:
+                print("✅ Automated video generation completed!")
+                sys.exit(0)
+            else:
+                print("❌ Automated video generation failed!")
+                sys.exit(1)
         else:
-            print("❌ Invalid choice. Please select 1-4.")
+            # Interactive mode
+            system.run()
+            
+    except Exception as e:
+        print(f"💥 Fatal error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    print("🎬 PROFESSIONAL VIRAL LEGAL SHORTS SYSTEM")
-    print("=" * 50)
-    print("🔥 Features:")
-    print("✅ Professional animated backgrounds for each theme")
-    print("✅ Word-by-word viral subtitles with power word emphasis") 
-    print("✅ Theme-appropriate background music with chord progressions")
-    print("✅ 8-day topic rotation with 3 unique variations each")
-    print("✅ Real legal cases with actual settlement amounts")
-    print("✅ Complete marketing packages with viral titles")
-    print("✅ Perfect 55-second duration for YouTube Shorts")
-    print("✅ 9:16 aspect ratio optimized for mobile")
-    print("=" * 50)
-    
-    # Check dependencies
-    required_packages = ['moviepy', 'opencv-python', 'pyttsx3', 'numpy']
-    missing_packages = []
-    
-    for package in required_packages:
-        try:
-            __import__(package.replace('-', '_'))
-        except ImportError:
-            missing_packages.append(package)
-            
-    if missing_packages:
-        print("\n⚠️  MISSING DEPENDENCIES:")
-        print("Please install the following packages:")
-        for package in missing_packages:
-            print(f"   pip install {package}")
-        print("\nThen run this script again.")
-    else:
-        print("\n✅ All dependencies found!")
-        print("🚀 Ready to create viral legal shorts!\n")
-        main()
-
-# ADDITIONAL PROFESSIONAL FEATURES:
-
-class AdvancedViralFeatures:
-    """Advanced features for viral optimization"""
-    
-    @staticmethod
-    def add_trending_elements(video_clip, topic_theme):
-        """Add trending visual elements based on current viral trends"""
-        
-        # Trending visual effects for 2024-2025
-        effects = {
-            "cyber_tech": [
-                "glitch_effect",
-                "matrix_rain", 
-                "neon_borders",
-                "particle_systems"
-            ],
-            "corporate_lawsuit": [
-                "professional_slides",
-                "data_visualizations", 
-                "corporate_overlays",
-                "authority_symbols"
-            ],
-            "workplace_justice": [
-                "workplace_scenes",
-                "justice_scales",
-                "professional_transitions",
-                "empowerment_effects"
-            ]
-        }
-        
-        return video_clip  # Enhanced with trend-specific effects
-    
-    @staticmethod
-    def optimize_for_platform(video_clip, platform="youtube_shorts"):
-        """Platform-specific optimizations"""
-        
-        optimizations = {
-            "youtube_shorts": {
-                "aspect_ratio": (9, 16),
-                "duration": 55,  # Sweet spot for algorithm
-                "subtitle_position": "center",
-                "call_to_action": "Subscribe for daily legal tips!"
-            },
-            "tiktok": {
-                "aspect_ratio": (9, 16), 
-                "duration": 30,  # Shorter for TikTok
-                "subtitle_position": "bottom_third",
-                "call_to_action": "Follow for legal hacks!"
-            },
-            "instagram_reels": {
-                "aspect_ratio": (9, 16),
-                "duration": 45,
-                "subtitle_position": "center_lower",
-                "call_to_action": "Save this legal tip!"
-            }
-        }
-        
-        return video_clip  # Optimized for specific platform
-    
-    @staticmethod
-    def generate_thumbnail_variants(topic, variation, theme):
-        """Create multiple thumbnail options for A/B testing"""
-        
-        thumbnail_styles = [
-            {
-                "style": "shocking_numbers",
-                "elements": ["Large dollar amount", "Shocked face emoji", "Red arrows"],
-                "text": f"${variation['amount']} SETTLEMENT!"
-            },
-            {
-                "style": "authority_expert", 
-                "elements": ["Professional background", "Legal symbols", "Clean text"],
-                "text": f"{topic} EXPLAINED"
-            },
-            {
-                "style": "curiosity_gap",
-                "elements": ["Question marks", "Mystery elements", "Bright colors"],
-                "text": "LAWYERS HATE THIS TRICK"
-            }
-        ]
-        
-        return thumbnail_styles
-
-# VIRAL SUCCESS METRICS TRACKER:
-
-class ViralAnalytics:
-    """Track and optimize viral performance"""
-    
-    def __init__(self):
-        self.performance_data = {
-            "topics": {},
-            "themes": {},
-            "variations": {},
-            "upload_times": {},
-            "viral_elements": {}
-        }
-    
-    def track_performance(self, video_data, engagement_metrics):
-        """Track which elements drive viral success"""
-        
-        topic = video_data["topic"]
-        theme = video_data["theme"] 
-        variation = video_data["variation"]
-        
-        # Store performance data
-        if topic not in self.performance_data["topics"]:
-            self.performance_data["topics"][topic] = []
-        
-        self.performance_data["topics"][topic].append({
-            "engagement": engagement_metrics,
-            "theme": theme,
-            "variation": variation,
-            "timestamp": datetime.now()
-        })
-    
-    def get_optimization_suggestions(self):
-        """AI-powered suggestions for viral optimization"""
-        
-        suggestions = [
-            "🔥 Power words in titles increase engagement by 300%",
-            "💰 Dollar amounts in thumbnails get 250% more clicks", 
-            "⏰ Upload between 7-9 PM IST for maximum reach",
-            "📱 Word-by-word subtitles increase watch time by 180%",
-            "🎵 Background music improves retention by 150%",
-            "🔄 Consistent 8-day rotation builds loyal audience",
-            "💬 Ask questions in descriptions to boost comments",
-            "📌 Pin your own comment within 5 minutes of upload"
-        ]
-        
-        return suggestions
-
-# COMPLETE VIRAL ECOSYSTEM:
-
-class ViralLegalEcosystem:
-    """Complete system for viral legal content creation"""
-    
-    def __init__(self):
-        self.video_creator = ViralLegalShortsCreator()
-        self.advanced_features = AdvancedViralFeatures()
-        self.analytics = ViralAnalytics()
-    
-    def create_viral_campaign(self, duration_days=30):
-        """Create complete 30-day viral campaign"""
-        
-        campaign = {
-            "videos": [],
-            "posting_schedule": [],
-            "marketing_materials": [],
-            "optimization_strategy": []
-        }
-        
-        for day in range(duration_days):
-            # Create video for each day
-            video_data = self.video_creator.get_current_topic()
-            
-            campaign["videos"].append({
-                "day": day + 1,
-                "topic": video_data["topic"],
-                "theme": video_data["theme"], 
-                "variation": video_data["variation"],
-                "optimal_time": "7:30 PM IST"
-            })
-            
-        return campaign
-    
-    def generate_content_calendar(self, months=3):
-        """Generate 3-month content calendar"""
-        
-        calendar = {}
-        current_date = datetime.now()
-        
-        for month in range(months):
-            month_date = current_date + timedelta(days=30*month)
-            month_name = month_date.strftime("%B %Y")
-            
-            calendar[month_name] = {
-                "theme_focus": self.get_monthly_theme(month),
-                "viral_goals": self.get_monthly_goals(month),
-                "content_variations": self.get_content_variations(month),
-                "optimization_focus": self.get_optimization_focus(month)
-            }
-            
-        return calendar
-    
-    def get_monthly_theme(self, month):
-        """Rotating monthly themes for viral optimization"""
-        themes = [
-            "Consumer Protection Focus", 
-            "Employment Rights Spotlight",
-            "Tech Privacy Deep Dive"
-        ]
-        return themes[month % len(themes)]
-    
-    def get_monthly_goals(self, month):
-        """Progressive viral goals"""
-        base_goals = {
-            "subscribers": 1000 * (month + 1),
-            "views_per_video": 10000 * (month + 1), 
-            "engagement_rate": min(15 + month * 2, 25)
-        }
-        return base_goals
-    
-    def get_content_variations(self, month):
-        """Monthly content variation strategies"""
-        strategies = [
-            "Shock Value + Education",
-            "Authority Building + Case Studies", 
-            "Trending Topics + Legal Analysis"
-        ]
-        return strategies[month % len(strategies)]
-    
-    def get_optimization_focus(self, month):
-        """Monthly optimization priorities"""
-        focus_areas = [
-            "Thumbnail A/B Testing",
-            "Title Optimization", 
-            "Engagement Strategy"
-        ]
-        return focus_areas[month % len(focus_areas)]
-
-print("\n🎯 VIRAL LEGAL SHORTS - COMPLETE PROFESSIONAL SYSTEM")
-print("💡 This system creates viral-quality legal shorts that compete with top channels!")
-print("🚀 Ready to dominate the legal education space on YouTube Shorts!")
+    main()
