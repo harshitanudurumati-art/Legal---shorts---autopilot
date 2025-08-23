@@ -1,72 +1,72 @@
-name: Legal Video Auto-Generation System
+name: Legal Video Autopilot
 
 on:
   schedule:
-    - cron: '30 9 * * *'  # 3:00 PM IST (9:30 AM UTC)
-  workflow_dispatch:  # Allow manual runs
+    - cron: '0 */8 * * *'  # Every 8 hours
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   generate-video:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
-      
+      uses: actions/checkout@v3
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-        
-    - name: Setup FFmpeg
+    
+    - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
-      with:
-        ffmpeg-version: release
-        
-    - name: Verify FFmpeg installation
-      run: |
-        ffmpeg -version
-        which ffmpeg
-        
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y fonts-dejavu-core fonts-dejavu-extra
-        
+      id: setup-ffmpeg
+    
     - name: Install Python dependencies
       run: |
-        pip install --upgrade pip
-        pip install requests pillow gtts
-        
-    - name: List files before execution
+        python -m pip install --upgrade pip
+        pip install requests
+        pip install moviepy
+        pip install gtts
+        pip install pillow
+        pip install numpy
+        echo "✅ All Python packages installed successfully"
+    
+    - name: Verify installations
       run: |
-        echo "Files in repository:"
-        ls -la
-        
+        echo "🔍 Verifying installations..."
+        python -c "import moviepy; print('✅ MoviePy:', moviepy.__version__)"
+        python -c "import requests; print('✅ Requests installed')"
+        python -c "import gtts; print('✅ gTTS installed')"
+        ffmpeg -version | head -1
+        echo "✅ All verifications passed"
+    
     - name: Run autopilot script with debugging
       env:
         HF_API_KEY: ${{ secrets.HF_API_KEY }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.HF_API_KEY }}
       run: |
         echo "Starting autopilot script..."
         python autopilot.py
-        
-    - name: List generated files
-      run: |
-        echo "Generated files:"
-        ls -la *.mp4 *.json *.txt 2>/dev/null || echo "No output files found"
-        
-    - name: Upload generated content
-      uses: actions/upload-artifact@v4
-      if: always()
+    
+    - name: Upload generated videos
+      uses: actions/upload-artifact@v3
+      if: always()  # Upload even if there are errors
       with:
-        name: legal-video-content-${{ github.run_number }}
+        name: legal-videos
         path: |
           *.mp4
           *.json
-          *.txt
-        if-no-files-found: warn
+          *.mp3
+          *.png
+        retention-days: 30
+    
+    - name: List all generated files
+      if: always()
+      run: |
+        echo "📁 Files in current directory:"
+        ls -la
+        echo "🎬 Video files:"
+        ls -la *.mp4 2>/dev/null || echo "No MP4 files found"
