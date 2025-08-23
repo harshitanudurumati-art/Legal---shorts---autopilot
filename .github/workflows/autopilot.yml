@@ -18,16 +18,24 @@ jobs:
       with:
         python-version: '3.9'
         
-    - name: Install system dependencies
+    - name: Install system dependencies for video processing
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg imagemagick
+        sudo apt-get install -y ffmpeg imagemagick libmagickwand-dev
         
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests openai moviepy pillow gtts numpy imageio imageio-ffmpeg
-        pip install --upgrade moviepy
+        pip install --no-cache-dir requests pillow gtts numpy
+        pip install --no-cache-dir imageio imageio-ffmpeg
+        pip install --no-cache-dir moviepy
+        pip install --no-cache-dir openai
+        
+    - name: Verify MoviePy installation
+      run: |
+        python -c "import moviepy.editor as mp; print('MoviePy imported successfully')"
+        python -c "import requests; print('Requests imported successfully')"
+        python -c "import openai; print('OpenAI imported successfully')"
         
     - name: Run autopilot script
       env:
@@ -38,7 +46,7 @@ jobs:
       run: python autopilot.py
       
     - name: Upload generated content
-      uses: actions/upload-artifact@v4  # Updated from v3 to v4
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: legal-video-content
