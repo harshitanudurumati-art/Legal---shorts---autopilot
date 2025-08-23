@@ -468,7 +468,8 @@ class ViralLegalShortsSystem:
             
             return frame
         
-        return VideoFileClip("dummy").set_duration(duration).set_fps(self.video_config['fps']).set_make_frame(make_frame)
+        # Create video clip using VideoClip instead of VideoFileClip
+        return VideoClip(make_frame, duration=duration).set_fps(self.video_config['fps'])
 
     def create_viral_subtitles(self, script, duration):
         """Create word-by-word viral subtitles with power word emphasis"""
