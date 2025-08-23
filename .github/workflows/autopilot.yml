@@ -44,7 +44,7 @@ jobs:
         
     - name: Run autopilot script
       run: |
-        python autopilot.py
+        python autopilot.py --auto
         
     - name: Upload generated content
       uses: actions/upload-artifact@v4
