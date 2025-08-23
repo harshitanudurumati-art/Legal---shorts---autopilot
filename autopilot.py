@@ -2,137 +2,129 @@ import os
 import json
 import random
 import subprocess
+import logging
 from datetime import datetime
-import moviepy.editor as mp
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, TextClip, concatenate_videoclips
 from gtts import gTTS
+from openai import OpenAI
 
-# ===================== CONFIG =====================
-TARGET_DURATION = 60  # seconds
-OUTPUT_FILE = "final.mp4"
-BG_VIDEO = "bg_gradient.mp4"
+# ---------------- CONFIG ---------------- #
 TOPICS_FILE = "topics.json"
-DEBUG = True
+TARGET_DURATION = 60  # seconds
+BG_VIDEO_FILE = "bg_gradient.mp4"
+FINAL_VIDEO_FILE = "final.mp4"
 
-# ===================== HELPER FUNCTIONS =====================
-def debug_print(msg):
-    if DEBUG:
-        print(f"[DEBUG] {msg}")
+# Logging
+logging.basicConfig(level=logging.DEBUG, format='[DEBUG] %(message)s')
 
-def run_ffmpeg(cmd):
-    debug_print(f"Running: {cmd}")
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if result.returncode != 0:
-        debug_print(f"FFmpeg error:\n{result.stderr}")
-        return False
-    return True
+# Initialize OpenAI client
+logging.debug("Initializing OpenAI client...")
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logging.debug("OpenAI client initialized ✅")
 
-def create_gradient_bg(output_file=BG_VIDEO, duration=TARGET_DURATION):
-    debug_print("Creating gradient background video...")
-    cmd = (
-        f"ffmpeg -y -f lavfi -i color=c=blue:s=1080x1920:d={duration}:r=30 "
-        f"-vf format=yuv420p {output_file}"
-    )
-    if not run_ffmpeg(cmd):
-        debug_print("Failed to create gradient background, using blank fallback.")
-        # fallback: create 1s blank video repeated
-        cmd_fb = (
-            f"ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=1 "
-            f"-vf format=yuv420p,loop=60:1:0 {output_file}"
-        )
-        run_ffmpeg(cmd_fb)
-    return output_file
+# ---------------- HELPERS ---------------- #
+def load_topics():
+    logging.debug("Loading topics from JSON...")
+    with open(TOPICS_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        topics = data.get("topics", [])
+        if not topics:
+            raise ValueError("topics.json is empty or missing 'topics' key")
+        logging.debug(f"Loaded {len(topics)} topics")
+        return topics
 
 def pick_topic():
-    debug_print("Picking a random topic...")
-    if not os.path.exists(TOPICS_FILE):
-        debug_print(f"{TOPICS_FILE} missing!")
-        return "General Law Topic"
-    with open(TOPICS_FILE, "r") as f:
-        topics = json.load(f)
-    if not topics:
-        return "General Law Topic"
+    topics = load_topics()
     topic = random.choice(topics)
-    debug_print(f"Selected Topic: {topic}")
+    logging.debug(f"Selected Topic: {topic}")
     return topic
 
-def generate_script(topic):
-    debug_print(f"Generating script for topic: {topic}")
+def run_ffmpeg(cmd):
+    logging.debug(f"Running ffmpeg command: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logging.debug(f"FFmpeg stderr: {result.stderr}")
+        raise RuntimeError(f"FFmpeg failed: {result.stderr}")
+    return result
+
+def create_background():
+    logging.debug("Creating background video...")
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", "color=size=1080x1920:rate=30:duration=60:color=#1e3c72",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-r", "30",
+        BG_VIDEO_FILE
+    ]
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        prompt = (
-            f"Explain the topic '{topic}' in an interesting way with examples, "
-            f"for a 1-minute narrated video."
-        )
-        response = client.chat.completions.create(
+        run_ffmpeg(cmd)
+        logging.debug(f"Background video created: {BG_VIDEO_FILE}")
+    except RuntimeError as e:
+        logging.debug(f"Background creation failed: {e}")
+        # fallback to blank video
+        logging.debug("Creating fallback blank background")
+        with open(BG_VIDEO_FILE, "wb") as f:
+            f.write(b"")  # minimal placeholder
+    return BG_VIDEO_FILE
+
+def generate_narration(script_text, lang="en"):
+    logging.debug("Generating audio narration...")
+    tts = gTTS(script_text, lang=lang)
+    audio_file = "narration.mp3"
+    tts.save(audio_file)
+    logging.debug(f"Audio saved: {audio_file}")
+    return audio_file
+
+def generate_script(topic):
+    logging.debug(f"Generating script for topic: {topic}")
+    prompt = f"Give a 1-minute interesting explanation, example, or fact about '{topic}' in simple language."
+    try:
+        response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=300
+            temperature=0.7
         )
-        text = response.choices[0].message.content.strip()
-        if len(text.split()) < 20:
-            raise Exception("Too short")
+        script_text = response.choices[0].message.content.strip()
+        logging.debug(f"Generated script ({len(script_text.split())} words)")
+        return script_text
     except Exception as e:
-        debug_print(f"OpenAI failed: {e}")
-        text = (
-            f"{topic} is an important topic in law. "
-            f"Understanding it can help people protect their rights. "
-            f"For example, if a tenant faces unfair treatment by a landlord, "
-            f"knowing their rights allows them to take appropriate action legally. "
-            f"Always consult proper legal guidance for your situations."
-        )
-    debug_print(f"Generated script ({len(text.split())} words)")
-    return text
+        logging.debug(f"OpenAI API failed: {e}")
+        # fallback minimal script
+        return f"This is an interesting fact about {topic}."
 
-def create_narration(script, filename="narration.mp3"):
-    debug_print("Generating narration audio...")
-    tts = gTTS(text=script, lang="en")
-    tts.save(filename)
-    return filename
+def create_video(bg_path, audio_path, script_text, out_file):
+    logging.debug("Creating final video with text overlay and narration...")
+    video_clip = VideoFileClip(bg_path).subclip(0, TARGET_DURATION)
+    audio_clip = AudioFileClip(audio_path)
 
-def overlay_text_on_video(bg_path, script, out_file=OUTPUT_FILE):
-    debug_print("Creating final video with text overlay...")
-    video_clip = mp.VideoFileClip(bg_path).subclip(0, TARGET_DURATION)
-    
-    txt_clip = mp.TextClip(
-        script,
-        fontsize=50,
-        color='white',
-        method='caption',
-        size=(video_clip.w - 100, None),
-        align='center'
-    ).set_position(("center","bottom")).set_duration(TARGET_DURATION)
-    
-    final_clip = mp.CompositeVideoClip([video_clip, txt_clip])
-    
-    return final_clip
+    # Split script into chunks for overlay
+    lines = script_text.split(". ")
+    text_clips = []
+    duration_per_line = TARGET_DURATION / max(len(lines), 1)
+    for i, line in enumerate(lines):
+        txt_clip = TextClip(line, fontsize=50, color="white", method="caption", size=(1080, None))
+        txt_clip = txt_clip.set_position("center").set_start(i * duration_per_line).set_duration(duration_per_line)
+        text_clips.append(txt_clip)
 
-def create_video(bg_path, narration_path, script, out_file=OUTPUT_FILE):
-    final_clip = overlay_text_on_video(bg_path, script, out_file)
-    
-    # Add audio
-    audio_clip = mp.AudioFileClip(narration_path).subclip(0, TARGET_DURATION)
-    final_clip = final_clip.set_audio(audio_clip)
-    
-    debug_print(f"Writing final video to {out_file}...")
-    final_clip.write_videofile(
-        out_file, 
-        fps=30,
-        codec="libx264",
-        audio_codec="aac"
-    )
+    final = CompositeVideoClip([video_clip, *text_clips])
+    final = final.set_audio(audio_clip)
+    final.write_videofile(out_file, fps=30, codec="libx264", audio_codec="aac")
+    logging.debug(f"Final video created: {out_file}")
     return out_file
 
-# ===================== MAIN =====================
+# ---------------- MAIN ---------------- #
 def main():
-    debug_print("=== Autopilot run started ===")
+    logging.debug("=== Autopilot run started ===")
     topic = pick_topic()
     script = generate_script(topic)
-    bg_video = create_gradient_bg()
-    narration = create_narration(script)
-    final_video = create_video(bg_video, narration, script)
-    debug_print(f"Video creation completed: {final_video}")
+    narration = generate_narration(script)
+    bg_video = create_background()
+    final_video = create_video(bg_video, narration, script, FINAL_VIDEO_FILE)
+    logging.debug("=== Autopilot run finished ===")
+    logging.debug(f"Video saved at: {final_video}")
 
 if __name__ == "__main__":
     main()
