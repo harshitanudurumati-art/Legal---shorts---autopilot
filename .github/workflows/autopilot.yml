@@ -1,72 +1,38 @@
-name: Legal Video Auto-Generation System
+name: Generate Video Bot
 
 on:
+  workflow_dispatch:   # run manually
   schedule:
-    - cron: '30 9 * * *'  # 3:00 PM IST (9:30 AM UTC)
-  workflow_dispatch:  # Allow manual runs
+    - cron: "0 10 * * *"   # run every day at 10:00 UTC
 
 jobs:
-  generate-video:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+
     steps:
-    - name: Checkout repository
+    - name: Checkout repo
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
-        
-    - name: Setup FFmpeg
-      uses: FedericoCarboni/setup-ffmpeg@v3
-      with:
-        ffmpeg-version: release
-        
-    - name: Verify FFmpeg installation
+        python-version: "3.10"
+
+    - name: Install dependencies
       run: |
-        ffmpeg -version
-        which ffmpeg
-        
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y fonts-dejavu-core fonts-dejavu-extra
-        
-    - name: Install Python dependencies
-      run: |
-        pip install --upgrade pip
-        pip install requests pillow gtts
-        
-    - name: List files before execution
-      run: |
-        echo "Files in repository:"
-        ls -la
-        
-    - name: Run autopilot script with debugging
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run script
       env:
-        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.HF_API_KEY }}
       run: |
-        echo "Starting autopilot script..."
-        python autopilot.py
-        
-    - name: List generated files
-      run: |
-        echo "Generated files:"
-        ls -la *.mp4 *.json *.txt 2>/dev/null || echo "No output files found"
-        
-    - name: Upload generated content
+        python main.py
+
+    - name: Upload video
       uses: actions/upload-artifact@v4
-      if: always()
       with:
-        name: legal-video-content-${{ github.run_number }}
-        path: |
-          *.mp4
-          *.json
-          *.txt
-        if-no-files-found: warn
+        name: generated-video
+        path: output/*.mp4
