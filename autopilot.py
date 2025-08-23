@@ -1,188 +1,188 @@
 import os
-import json
 import random
-import datetime
-import requests
 import subprocess
-import sys
+import textwrap
+from datetime import datetime
+
+import moviepy.editor as mp
+import requests
 from gtts import gTTS
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 from openai import OpenAI
 
-# ========= DEBUG UTIL ==========
-def debug(msg):
-    print(f"[DEBUG] {msg}", flush=True)
+# -----------------------------
+# Config
+# -----------------------------
+TARGET_DURATION = 60  # seconds
 
-# ========= CONFIG ==========
-HF_API_KEY = os.getenv("HF_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+LEGAL_TOPICS = [
+    "Consumer Rights Protection Laws",
+    "Digital Privacy and Data Protection",
+    "Employment Law Basics",
+    "Tenant Rights and Housing Laws",
+    "Intellectual Property Rights",
+    "Contract Law Fundamentals",
+    "Criminal Law Basics",
+    "Family Law Essentials"
+]
 
-TOPICS_FILE = "topics.json"
-OUTPUT_TEXT = "output.txt"
-OUTPUT_AUDIO = "output.mp3"
-OUTPUT_VIDEO = "final.mp4"
+BACKGROUND_VIDEO_SOURCES = {
+    "Consumer Rights Protection Laws": ["videos/consumer1.mp4", "videos/consumer2.mp4"],
+    "Digital Privacy and Data Protection": ["videos/privacy1.mp4", "videos/privacy2.mp4"],
+    "Employment Law Basics": ["videos/employment1.mp4", "videos/employment2.mp4"],
+    "Tenant Rights and Housing Laws": ["videos/tenant1.mp4", "videos/tenant2.mp4"],
+    "Intellectual Property Rights": ["videos/ipr1.mp4", "videos/ipr2.mp4"],
+    "Contract Law Fundamentals": ["videos/contract1.mp4", "videos/contract2.mp4"],
+    "Criminal Law Basics": ["videos/criminal1.mp4", "videos/criminal2.mp4"],
+    "Family Law Essentials": ["videos/family1.mp4", "videos/family2.mp4"],
+    "default": ["videos/default1.mp4"]
+}
 
-# ========= CLIENTS ==========
-client = None
-if OPENAI_API_KEY:
+UA = {"User-Agent": "Mozilla/5.0"}
+
+# -----------------------------
+# Utilities
+# -----------------------------
+def run_ffmpeg(cmd):
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("[ERROR] FFmpeg failed:", result.stderr[:4000])
+    return result
+
+def safe_download(url, out_path, expect_content_prefix=None, timeout=45):
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        debug("OpenAI client initialized ✅")
-    except Exception as e:
-        debug(f"Failed to init OpenAI client: {e}")
+        with requests.get(url, stream=True, headers=UA, timeout=timeout) as r:
+            if expect_content_prefix and not r.headers.get("Content-Type", "").startswith(expect_content_prefix):
+                return False
+            if r.status_code != 200:
+                return False
+            with open(out_path, "wb") as f:
+                for chunk in r.iter_content(8192):
+                    if chunk:
+                        f.write(chunk)
+        return os.path.getsize(out_path) > 50*1024
+    except Exception:
+        return False
 
-# ========= STEP 1: PICK TOPIC ==========
-def pick_topic():
-    debug("Picking topic...")
-    if not os.path.exists(TOPICS_FILE):
-        topics = [
-            "Consumer Rights in India",
-            "Digital Privacy Laws",
-            "Employment Law Basics",
-            "Tenant Rights",
-            "Intellectual Property Rights",
-            "Contract Law"
-        ]
-    else:
-        with open(TOPICS_FILE, "r") as f:
-            topics = json.load(f)
-
-        # ensure we always have a list
-        if isinstance(topics, dict):
-            debug("topics.json is a dict, converting to list...")
-            topics = list(topics.values())
-        elif not isinstance(topics, list):
-            debug("topics.json format not recognized, using fallback list...")
-            topics = [
-                "Consumer Rights in India",
-                "Digital Privacy Laws",
-                "Employment Law Basics",
-                "Tenant Rights",
-                "Intellectual Property Rights",
-                "Contract Law"
-            ]
-
-    topic = random.choice(topics)
-    debug(f"Picked topic: {topic}")
-    return topic
-
-# ========= STEP 2: GENERATE TEXT ==========
-def generate_text(topic):
-    debug("Generating text...")
-    if client:
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": f"Explain {topic} in simple terms (150 words)."}]
-            )
-            text = response.choices[0].message.content.strip()
-            debug("Got response from OpenAI ✅")
-            return text
-        except Exception as e:
-            debug(f"OpenAI generation failed: {e}")
-
-    if HF_API_KEY:
-        try:
-            url = "https://api-inference.huggingface.co/models/gpt2"
-            headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-            payload = {"inputs": f"Explain {topic} in simple terms."}
-            r = requests.post(url, headers=headers, json=payload, timeout=60)
-            data = r.json()
-            text = data[0]["generated_text"]
-            debug("Got response from HuggingFace ✅")
-            return text
-        except Exception as e:
-            debug(f"HuggingFace generation failed: {e}")
-
-    debug("Fallback text used")
-    return f"{topic} is an important legal topic everyone should know about."
-
-# ========= STEP 3: SAVE TEXT ==========
-def save_text(text):
-    with open(OUTPUT_TEXT, "w", encoding="utf-8") as f:
-        f.write(text)
-    debug(f"Saved text to {OUTPUT_TEXT}")
-
-# ========= STEP 4: TTS ==========
-def text_to_speech(text):
-    debug("Generating audio...")
+# -----------------------------
+# AI Script Generation
+# -----------------------------
+def generate_script(topic, client):
+    print(f"[DEBUG] Generating script for topic: {topic}")
+    prompt = f"""
+    Write a 1-minute educational video script (~150-200 words) explaining {topic}.
+    Include a simple explanation, at least one interesting example or fact,
+    and end with a takeaway encouraging viewers to follow legal tips.
+    """
     try:
-        tts = gTTS(text=text, lang="en")
-        tts.save(OUTPUT_AUDIO)
-        debug(f"Saved audio to {OUTPUT_AUDIO}")
-        return OUTPUT_AUDIO
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"user","content":prompt}]
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        debug(f"TTS failed: {e}")
-        return None
+        print("[ERROR] OpenAI API failed:", e)
+        # fallback
+        return f"This is a short informative video about {topic}. Always know your rights!"
 
-# ========= STEP 5: VIDEO CREATION ==========
-def create_video(audio_file, text):
-    debug("Creating video with subtitles...")
-    try:
-        audio = AudioFileClip(audio_file)
-        duration = audio.duration
+# -----------------------------
+# Background video selection
+# -----------------------------
+def select_background_video(topic):
+    sources = BACKGROUND_VIDEO_SOURCES.get(topic, BACKGROUND_VIDEO_SOURCES["default"])
+    for path in sources:
+        if os.path.exists(path):
+            return path
+    return create_gradient_background()
 
-        # Background image
-        img = "background.jpg"
-        if not os.path.exists(img):
-            debug("No background.jpg found, using black background")
-            img = "black.jpg"
-            from PIL import Image
-            Image.new("RGB", (1280, 720), (0, 0, 0)).save(img)
+def create_gradient_background():
+    out = "bg_gradient.mp4"
+    vf = (
+        "geq=r='128+90*sin(2*PI*t/9)':g='128+80*cos(2*PI*t/11)':b='200+50*sin(2*PI*t/7)',"
+        "format=yuv420p,"
+        "drawbox=x=0:y=0:w=iw:h=ih:color=black@0.18:t=fill"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", f"color=size=1080x1920:rate=30:duration={TARGET_DURATION}:color=#1e3c72",
+        "-vf", vf,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-r", "30",
+        out
+    ]
+    res = run_ffmpeg(cmd)
+    return out if res.returncode == 0 else None
 
-        clip = ImageClip(img).set_duration(duration).set_audio(audio)
+# -----------------------------
+# TTS Narration
+# -----------------------------
+def generate_narration(script_text):
+    tts = gTTS(text=script_text, lang="en")
+    tts_file = "narration.mp3"
+    tts.save(tts_file)
+    return tts_file
 
-        # FFmpeg subtitles overlay
-        with open("subs.txt", "w", encoding="utf-8") as f:
-            f.write(text)
+# -----------------------------
+# Video creation
+# -----------------------------
+def create_video(bg_path, narration_path, script_text, out_path):
+    video_clip = mp.VideoFileClip(bg_path).subclip(0, TARGET_DURATION)
+    audio_clip = mp.AudioFileClip(narration_path)
+    video_clip = video_clip.set_audio(audio_clip).set_duration(audio_clip.duration)
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", audio_file,
-            "-loop", "1", "-i", img,
-            "-vf", f"drawtext=textfile=subs.txt:fontcolor=white:fontsize=28:x=(w-text_w)/2:y=h-100",
-            "-shortest", OUTPUT_VIDEO
-        ]
-        debug(f"Running ffmpeg: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
-        debug(f"Video saved to {OUTPUT_VIDEO}")
-        return OUTPUT_VIDEO
-    except Exception as e:
-        debug(f"Video creation failed: {e}")
-        return None
+    wrapped_text = textwrap.fill(script_text, width=30)
+    txt_clip = mp.TextClip(
+        wrapped_text, fontsize=50, color="white", bg_color="black", method="caption", size=video_clip.size
+    ).set_position(("center", "bottom")).set_duration(audio_clip.duration)
 
-# ========= STEP 6: SEND TO TELEGRAM ==========
-def send_to_telegram(file):
-    debug("Uploading video to Telegram...")
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
-        with open(file, "rb") as f:
-            r = requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID}, files={"video": f})
-        if r.status_code == 200:
-            debug("Video sent to Telegram ✅")
-        else:
-            debug(f"Telegram upload failed: {r.text}")
-    except Exception as e:
-        debug(f"Telegram error: {e}")
+    final = mp.CompositeVideoClip([video_clip, txt_clip])
+    final.write_videofile(out_path, fps=24, codec="libx264", audio_codec="aac")
+    return out_path
 
-# ========= MAIN ==========
+# -----------------------------
+# Telegram upload
+# -----------------------------
+def send_to_telegram(video_path, topic):
+    bot = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat = os.getenv("TELEGRAM_CHAT_ID")
+    if not bot or not chat:
+        print("[DEBUG] Telegram credentials missing, skipping upload.")
+        return False
+    caption = f"🔥 LEGAL SHORT\n📚 {topic}\n⏱️ {TARGET_DURATION}s\n#LegalTips #Law #KnowYourRights"
+    import requests
+    with open(video_path, "rb") as f:
+        resp = requests.post(f"https://api.telegram.org/bot{bot}/sendVideo",
+                             data={"chat_id": chat, "caption": caption},
+                             files={"video": f}, timeout=120)
+    ok = resp.status_code == 200
+    print("Telegram upload:", "OK" if ok else resp.text[:400])
+    return ok
+
+# -----------------------------
+# Main
+# -----------------------------
 def main():
-    debug("=== Autopilot run started ===")
-    topic = pick_topic()
-    text = generate_text(topic)
-    save_text(text)
-    audio = text_to_speech(text)
-    if not audio:
-        debug("No audio generated, aborting.")
-        sys.exit(1)
-    video = create_video(audio, text)
-    if video:
-        send_to_telegram(video)
-    else:
-        debug("No video generated.")
-    debug("=== Autopilot run finished ===")
+    print("[DEBUG] Initializing OpenAI client...")
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    print("[DEBUG] Picking a random topic...")
+    topic = random.choice(LEGAL_TOPICS)
+    print(f"[DEBUG] Selected Topic: {topic}")
+
+    script = generate_script(topic, client)
+    print(f"[DEBUG] Generated script ({len(script.split())} words)")
+
+    bg_video = select_background_video(topic)
+    narration = generate_narration(script)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_file = f"legal_short_{ts}.mp4"
+
+    print("[DEBUG] Creating video...")
+    final_video = create_video(bg_video, narration, script, out_file)
+    print(f"[DEBUG] Video created: {final_video}")
+
+    send_to_telegram(final_video, topic)
+    print("[DEBUG] Autopilot run finished ✅")
 
 if __name__ == "__main__":
     main()
